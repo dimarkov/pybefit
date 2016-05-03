@@ -50,6 +50,42 @@ class RewardEnv(Environment):
     step with probability p_r.
     """
     
+    def __init__(self, duration, dimension = 1, switch_probability = 0.05):
+        self.p = switch_probability
+        self.hidden_states['reward probability'] = np.zeros(self.T).as_type(int)       
+    
+    def update_hidden_states(self, t, *args):
+    """
+    Update the reward probability with probability p_r (the new value is sampled from a uniform 
+    distribution over a [0,1] interval), or mentain the previous value with probability 1-p_r.
+    
+    Parameters
+    ----------
+    t: int
+    Current time step.
+    """
+    
+    if(self.p >= np.random.rand()):
+        self.hidden_states['reward probability'][t] = np.random.rand()
+    else:
+        self.hidden_states['reward probability'][t] = self.hidden_states['reward probability'][t-1]
+        
+    def update_observations(self, t, *args):
+        """
+        Generate a reward in time step t given the current reward probability.
+        
+        Parameters
+        ----------
+        t: int
+        Current time step.
+        """
+        rew_prob = self.hidden_states['reward probability'][t]
+        if(rew_prob >= np.random.rand())
+            self.observations[t] = 1
+        else:
+            self.observations[t] = 0
+        
+    
 class StateEnv(Environment):
     """
     One or two dimensional environment in which state of the environment
@@ -93,12 +129,12 @@ class AR2DEnv(Environment):
              
     
     def update_observations(self, t):
-        p = 2 #order of the AR process
-        if( t < p):
+        ar_ord = 2 #order of the AR process
+        if( t < ar_ord):
             pass
         else:
             am = self.hidden_states['active model'][t]
-            self.observations[t,:] = np.dot(self.As[am], self.observations[t-p:t, :].flatten())
+            self.observations[t,:] = np.dot(self.As[am], self.observations[t-ar_ord:t, :].flatten())
                 + np.dot(np.linalg.cholesky(self.sigma), np.random.randn(self.d))
              
                 
