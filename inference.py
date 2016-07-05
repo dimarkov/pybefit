@@ -10,7 +10,7 @@ from numpy as np
 from numdifftools import Hessian
 
 class Inference(object):
-    """Bese class for various inference methods"""
+    """Base class for various inference methods"""
     def __init__(self, **kwargs):
         pass
     

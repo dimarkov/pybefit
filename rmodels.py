@@ -28,8 +28,9 @@ class SimulatedRM(ResponseModel):
 class AnalyticalRM(ResponseModel):
     
     def getTotalLogLikelihood(self, pvals):
-        """Return the sum of marginal log-likelihoods over all trial"""
+        """Return the sum of response log-likelihoods over all trials"""
         pass
     
     def getLogLikelihood(self, ind):
-        """Return the marginal log-likelihood at trial ind"""
+        """Return the response log-likelihood at trial ind"""
+	pass

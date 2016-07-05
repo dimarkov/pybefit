@@ -51,7 +51,7 @@ class RewardEnv(Environment):
     """
     
     def __init__(self, duration, dimension = 1, switch_probability = 0.05):
-        self.p = switch_probability
+        self.p_r = switch_probability
         self.hidden_states['reward probability'] = np.zeros(self.T).as_type(int)       
     
     def update_hidden_states(self, t, *args):
@@ -65,10 +65,10 @@ class RewardEnv(Environment):
     Current time step.
     """
     
-    if(self.p >= np.random.rand()):
-        self.hidden_states['reward probability'][t] = np.random.rand()
-    else:
-        self.hidden_states['reward probability'][t] = self.hidden_states['reward probability'][t-1]
+        if(self.p_r >= np.random.rand()):
+            self.hidden_states['reward probability'][t] = np.random.rand()
+        else:
+            self.hidden_states['reward probability'][t] = self.hidden_states['reward probability'][t-1]
         
     def update_observations(self, t, *args):
         """
@@ -92,18 +92,63 @@ class StateEnv(Environment):
     changes with probability p_s. 
     """
     
+    def __init__(self, duration, dimension = 1, switch_probability = 0.05,
+                 observation_noise = 1., diffusion_rate = 0.01, 
+                 perturbation_noise = 10.):
+        self.p_s = switch_probability
+        self.sigma = observation_noise
+        self.w1 = diffusion_rate
+        self.w2 = perturbation_noise
+        self.hidden_states['state value'] = np.zeros(self.T, self.d).as_type(int)
+        
+    def update_hidden_states(self, t, *args):
+    """
+    The values of the hidden state follow a diffusion process with probability 
+    1-p_s or switch to a new state value with probability p_s, where the new
+    state is sampled from a zero mean normal distribution with variance w_2,. 
+    
+    Parameters
+    ----------
+    t: int
+    Current time step.
+    """
+    
+        if(self.p_s >= np.random.rand()):
+            self.hidden_states['state value'][t, :] = 
+                np.sqrt(self.w2)*np.random.randn(self.d)
+        else:
+            self.hidden_states['state value'][t] = 
+                self.hidden_states['state value'][t-1] +
+                np.sqrt(self.w1)*np.random.randn(self.d)
+            
+    def update_observations(self, t, *args):
+    """
+    Generate an observation of the current state value corrapted by the 
+    observation noise \sigma.
+    
+    Parameters
+    ----------
+    t: int
+    Current time step.
+    """
+   
+        state_val = self.hidden_states['state value'][t]
+        self.observations[t] = state_val + np.sqrt(self.sigma)*np.random.randn(self.d)
+        
 class NoiseEnv(Environment):
     """
     One or two dimensional environment the emission variance 
     changes with probability p_n. 
     """
     
-class StateNoiseEnv(StateEnv, NoiseEnv):
+class StateNoiseEnv(Environment):
     """
     One or two dimensional environment in which state of the environment
     changes with probability p_s, and the emission variance changes with 
     probability p_n. 
     """
+    
+    pass
     
 class AR2DEnv(Environment):
     """
