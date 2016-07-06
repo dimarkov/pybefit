@@ -7,10 +7,24 @@ Created on Tue Feb  9 20:13:45 2016
 
 class ResponseModel(object):
     """Base class for response models"""
-    def __init__(self, responses, stimuli, prior, **kwargs):
-        self.responses = responses #set the messured behavioral responses
+    def __init__(self, stimuli, prior, perceptual_model, responses=None, params = None, **kwargs):
         self.stimuli = stimuli #set the presented stimuli
         self.prior = prior #set prior parameter probability
+	self.pm = perceptual_model #set the perceptual model
+	
+	#generate the behavioral responses or use the measured behavioral responses
+	if(responses == None):
+		if(params == None):
+			print "Error: responses or response model parameters have not been set"
+		else:
+			self.params = params
+			self.responses = self.generateResponses()
+	else:
+		self.responses = responses
+	
+    def generateResponses(self):
+	"""Generate behavioral responses"""
+
         
 class SimulatedRM(ResponseModel):
     
