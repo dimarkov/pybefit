@@ -2,9 +2,6 @@
 
 
 TODO:
-1. Add examples of experimental environments
-2. Add examples of response and perceptual models
-3. Update the license file
-
-CHANGELOG:
-Changes since the last version
+1. Build initial documentation with sphinx.
+2. Add examples of response and perceptual models.
+3. Define tests for various environments, behavioral models, and inference procedures.

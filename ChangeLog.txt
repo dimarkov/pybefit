@@ -1,0 +1,12 @@
+88ddc9d added the perceptual model class
+df96a4f updated the response model class
+3e82dbc corrected typos in rmodel class
+7b3d799 Added an environment with a switching reward probability
+433b743 Added a switching AR environment.
+9384fed Update to the README.md
+76078a8 added environments class
+cd4b48a added LICENSE test file
+75fa549 Initial Inference and ResponseModel classes added to the repo.
+9a591c3 Merge branch 'master' of https://github.com/dimarkov/pyBefit
+0263bbc Initial commit with basics
+41cffbe Initial commit
