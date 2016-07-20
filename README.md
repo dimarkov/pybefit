@@ -1,7 +1,10 @@
 # Probabilistic inference for models of behaviour
+=================================================
 
+pyBefit is a Python library for model-based analysis of behavioral data.
+the library is in very early stage of development, hence using it is not recommended at the moment.
 
-TODO:
-1. Build initial documentation with sphinx.
-2. Add examples of response and perceptual models.
-3. Define tests for various environments, behavioral models, and inference procedures.
+License
+-------
+
+See [license](LICENSE)
