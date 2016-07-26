@@ -4,6 +4,7 @@
 Todo:
     * Write proper module level docstring.
 """
+from builtins import range
 from abc import ABCMeta, abstractmethod, abstractproperty
 import pandas as pd
 import numpy as np
@@ -27,12 +28,12 @@ class Environment(object):
     def __init__(self, T, **kwargs):
         """Basic constructor for the Environment class."""
         self.T = T
-        if kwargs.has_key('d_o'):
+        if 'd_o' in kwargs:
             self.d_o = kwargs['d_o']
         else:
             self.d_o = 1
         
-        if kwargs.has_key('d_x'):
+        if 'd_x' in kwargs:
             self.d_x = kwargs['d_x']
         else:
             self.d_x = 1
@@ -41,7 +42,7 @@ class Environment(object):
         
     def generate_data(self):
         """Generates hidden states and observations."""
-        for t in xrange(1, self.T+1):
+        for t in range(1, self.T+1):
             self.update_hidden_states(t)
             self.update_observations(t)
     
@@ -84,9 +85,6 @@ class BinomialEnvironment(Environment):
        Attributes:
            rho (double): Probability of resampling the value of expectations
            p_t (array_like): Predifned time serries of expected values
-       
-       Todo: 
-           * Imlement performance measure in this environment
        
     """
     
