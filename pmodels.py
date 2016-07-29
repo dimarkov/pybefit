@@ -12,29 +12,31 @@ class PerceptualModel(object):
     """Base class for perceptual models.
     
     Attributes:
-        stimuli (DataFrame): Time series of sensory stimuli
-        T (int): Number of observations
+        T (int): Number of trials
+        d (int): Dimensionality of the posterior distribution
+        env (Environment): Experimental environment of the perceptual model.
         
     """
     
     __metaclas__ = ABCMeta
     
-    def __init__(self, stimuli):
-        self.stimuli = stimuli #set the time series of the sensory stimuli
-        self.T = len(stimuli) - 1
-    
+    def __init__(self, env, d):
+        self.env = env #set the time series of the sensory stimuli
+        self.T = self.env.T
+        self.d = d
+        
     def posterior_beliefs(self, *args):
-        """Estimate the posterior beliefs over an experimental block """
+        """Estimate the posterior beliefs over an experimental block."""
         
         for t in range(1,self.T+1):
             self.update_beliefs(t, *args)
             
-    def get_free_energy(self, *args):
+    def get_free_energy(self, *args, **kwargs):
         """Estimate the total variational free-energy of the perceptual model."""
         
         fe = 0
         for t in range(1, self.T+1):
-            self.update_beliefs(t, *args)
+            self.update_beliefs(t, *args, **kwargs)
             fe += self.free_energy(t, *args)
         
         return fe
@@ -63,21 +65,57 @@ class RescorlaWagner(PerceptualModel):
        
     """
        
-    def __init__(self, stimuli, mu0 = .5):
-        super(RescorlaWagner, self).__init__(stimuli)
+    def __init__(self, env, d, mu0 = .5):
+        """
+        Args:
+            env (Environment): Experimental environment of the perceptual model.
+            d (int): Dimensionality of the posterior distribution
+            mu0 (double): Prior expectation over hidden states
+        """
+        super(RescorlaWagner, self).__init__(env, d)
     
-        self.posterior = pd.DataFrame()
-        self.posterior[r'$\mu_t$'] = [np.nan]*(self.T + 1)
-        self.posterior[r'$\mu_t$'][0] = mu0
-        self.posterior[r'$v_t$'] = [np.nan]*(self.T + 1)
+        self.posterior = np.zeros( (self.T+1, self.d) )
+        self.posterior[0, :] = mu0
         
-    def update_beliefs(self, ind, alpha, *args):
-        """Estimate the updated beliefs after observing a stimulus at trial ind."""
+    def get_beliefs(self, alpha = None):
+        
+        update = self.posterior[1:, :].sum() == 0
+        
+        if alpha is None:
+            if update:
+               alpha = .5
+               for t in range(1, self.T + 1):
+                   self.update_beliefs(t, alpha)
+        else:
+            for t in range(1, self.T + 1):
+                self.update_beliefs(t, alpha)
 
-        self.posterior[r'$v_t$'][ind] = 1/alpha
-        self.posterior[r'$\mu_t$'][ind] = self.posterior[r'$\mu_t$'][ind-1] + \
-                                        alpha*( self.stimuli[r'$o_t$'][ind] - \
-                                        self.posterior[r'$\mu_t$'][ind-1])
+        if self.d == 1:
+            return pd.DataFrame({r'$\mu_t$': self.posterior[:, 0]})
+        else:
+            return pd.DataFrame(self.posterior, columns = [r'$\mu_{t,%d}$' % i 
+                            for i in range(self.d)])
+        
+        
+    def update_beliefs(self, ind, alpha, *args, **kwargs):
+        """Estimate the updated beliefs after observing a stimulus at trial ind."""
+        
+        self.posterior[ind, :] = self.posterior[ind-1, :]        
+        
+        #forgeting term
+        if 'beta' in kwargs.keys():
+            beta = kwargs['beta']
+        else:
+            beta = 0
+        
+        self.posterior[ind, :] += beta*( .5 - self.posterior[ind-1, :] )
+        
+        if self.env.o_t[ind, 1] == -1:
+            obs, choice = self.env.generate_observations(ind)
+        else:
+            obs, choice = self.env.o_t[ind, :].astype(int)
+        
+        self.posterior[ind, choice] += alpha*( obs - self.posterior[ind-1, choice] )
                                         
     def free_energy(self, ind, *args):
         """Compute the free energy of the perceptual model at trial ind.
@@ -90,74 +128,75 @@ class RescorlaWagner(PerceptualModel):
         
         """
 
-        p = self.posterior[r'$\mu_t$'][ind-1]
-        o = self.stimuli[r'$o_t$'][ind]
+        mu = self.posterior[ind-1, :]
+        obs, choice = self.env.o_t[ind, :].astype(int)
         
-        if p == 0:
-            if o:
+        if mu[choice] == 0:
+            if obs:
                 return -100000
             else:
                 return 0
-        elif p == 1:
-            if o:
+                
+        elif mu[choice] == 1:
+            if obs:
                 return 0
             else:
                 return -100000
         else:
-            return o*np.log(p) + (1-o)*np.log(1-p)  
+            return obs*np.log(mu[choice]) + (1-obs)*np.log(1-mu[choice])  
 
 def main():
     
-    from environments import BinomialEnvironment
+    from environments import MultiArmedBandit
     import seaborn as sns
     sns.set(style = "white", palette="muted", color_codes=True)
     
     T = 100
-    be = BinomialEnvironment(T)
-    be.generate_data()
+    env = MultiArmedBandit(T)
+    pm = RescorlaWagner(env, env.d_x)
     
-    pm = RescorlaWagner(be.data)
+    obs = env.get_observations()
+    hst = env.get_hidden_states()
     
     #use isres for optimisation of one dimensional functions
     from optmethods import isres
-    bounds = {'ub': np.array([.999]), 'lb': np.array([.001])}
+    bounds = {'ub': np.array([1.]), 'lb': np.array([0.])}
     f_opt, x_opt, res = isres( pm.get_free_energy, 1, 1e-6, 1e-8, bounds, np.array([0.5]) )
     print(f_opt, x_opt, res)
     
-    pm.posterior_beliefs(x_opt)
+    post = pm.get_beliefs(alpha = x_opt)
+
     
-    ax = be.data.plot(y = r'$o_t$', style = 'go')
-    ax = be.data.plot(y = r'$p_t$', style = 'k--', ax = ax)
+    ax = obs.plot(y = r'$o_t$', style = 'go')
+    ax = hst.plot(y = r'$p_t$', style = 'k--', ax = ax)
     
-    ax = pm.posterior.plot(y = r'$\mu_t$', style = 'r-', ax = ax)
+    ax = post.plot(y = r'$\mu_t$', style = 'r-', ax = ax)
     ax.legend(numpoints = 1)
     
     #optimize preceptual surprise over multiple experimental blocks
     
-    n = 100
-    exp_blocks = np.empty_like(np.ones(n), dtype = object)
-    for i in range(n):
-        exp_blocks[i] = BinomialEnvironment(T)
-        exp_blocks[i].generate_data()
-        
     def total_fe(x, n_pars, blocks):
         fe = 0
         for b in blocks:
-            pm = RescorlaWagner(b.data)
+            pm = RescorlaWagner(b, b.d_x)
             fe += pm.get_free_energy(x)
             
         return fe
+    
+    n = 100
+    T = 100
+    exp_blocks = [MultiArmedBandit(T)]*100 
         
     fe = lambda x,p: total_fe(x, p, exp_blocks)
     f_opt, x_opt, res = isres( fe, 1, 1e-6, 1e-8, bounds, np.array([0.5]) )
     print(f_opt/n, x_opt, res)
     
-    pm.posterior_beliefs(x_opt)
+    post = pm.get_beliefs(alpha = x_opt)
     
-    ax = be.data.plot(y = r'$o_t$', style = 'go')
-    ax = be.data.plot(y = r'$p_t$', style = 'k--', ax = ax)
+    ax = obs.plot(y = r'$o_t$', style = 'go')
+    ax = hst.plot(y = r'$p_t$', style = 'k--', ax = ax)
     
-    ax = pm.posterior.plot(y = r'$\mu_t$', style = 'r-', ax = ax)
+    ax = post.plot(y = r'$\mu_t$', style = 'r-', ax = ax)
     ax.legend(numpoints = 1)
     
     
