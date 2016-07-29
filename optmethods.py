@@ -3,7 +3,7 @@ from numpy import ones
 import nlopt as no
 import cma
 
-def isres(f, n, ftol, xtol, bounds, x_init, max_time = 180):
+def isres(f, n, ftol, xtol, bounds, x_init, max_time = 180, **kwargs):
     """Find global maxima of an objective function using isres algorithm.
     
     Args:
@@ -48,7 +48,7 @@ def isres(f, n, ftol, xtol, bounds, x_init, max_time = 180):
     return f_opt, x_opt, res
     
 
-def cmaes(f, n, ftol, xtol, bounds, x):
+def cmaes(f, n, ftol, xtol, bounds, x, **kwargs):
     """Find global maxima of an objective function using CMA-ES algorithm.
     
     Args:
@@ -75,22 +75,26 @@ def cmaes(f, n, ftol, xtol, bounds, x):
     opts['verb_disp'] = 0
     opts['verb_log'] = 0
     opts['verbose'] = 0
-    if(len(bounds['lb']) == n and len(bounds['ub']) == n):
-        opts['bounds'] = [bounds['lb'], bounds['ub']]
-    elif type(bounds['lb']) == int or type(bounds['lb']) == float:
+
+    if type(bounds['lb']) == int or type(bounds['lb']) == float:
         opts['bounds'] = [[bounds['lb']]*n, [bounds['ub']]*n]
+    elif len(bounds['lb']) == n and len(bounds['ub']) == n:
+        opts['bounds'] = [bounds['lb'], bounds['ub']]
     else:
         print('inconsistent definition of parameter bounds')
     
-    opts['CMA_stds'] = ones(n)*(bounds['ub'] - bounds['lb'])/4    
+    opts['CMA_stds'] = ones(n)*(bounds['ub'] - bounds['lb'])/4
     cma_sigma = 1;
+    
+    for s in kwargs.keys():
+        opts[s] = kwargs[s]
     
     #start optimization
     negf = lambda x: -f(x)
     res = cma.fmin(negf, x, cma_sigma, opts)
 
     #collect results
-    x_opt = res[5]
+    x_opt = res[0]
     f_opt = -res[1]
     res = res[-3]    
     
