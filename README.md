@@ -8,3 +8,7 @@ License
 -------
 
 See [license](LICENSE)
+
+# TODO:
+1. Redefine the structure of the project around PyTorch and Pyro.
+2. Add some useful content.
