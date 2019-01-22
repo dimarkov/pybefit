@@ -1,14 +1,36 @@
 # Probabilistic inference for models of behaviour
 =================================================
 
-pyBefit is a Python library for model-based analysis of behavioral data.
-The library is in an early stage of the development, hence using it is not recommended at the moment.
+PyBefit is a Python library for Bayesian analysis of behavioral data.
+It is based on [Pyro](pyro.ai) a probabilistic programing language 
+and [PyTorch](https://pytorch.org/) a machine learning library.
+
+Requirements
+------------
+
+numpy
+pandas
+pytorch
+matplotlib
+seaborn
+
+Installation
+------------
+
+The easiest way to install required libraries is using [conda](https://conda.io/miniconda.html)
+and pip package managers.
+
+First setup an environment using anaconda prompt (or just terminal in linux):
+
+```sh
+conda create -n befit python=3 numpy pandas matplotlib seaborn
+conda activate befit
+conda install pytorch -c pytorch
+ip install pyro-ppl
+```
 
 License
 -------
 
 See [license](LICENSE)
 
-# TODO:
-1. Redefine the structure of the project around PyTorch and Pyro.
-2. Add some useful content.
