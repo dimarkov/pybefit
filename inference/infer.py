@@ -113,7 +113,6 @@ class Inferrer(object):
         if labels is None:
             labels = par_names
         
-        par_values = {}
         
         quantiles = self._get_quantiles([.05, .5, .95])
             
@@ -127,19 +126,21 @@ class Inferrer(object):
             x = locs.detach()
             
         self.agent.set_parameters(x)
-            
+        
+        par_values = {}
         for name in par_names:
-            par_values.setdefault(name, [])
-            par_values[name].append(getattr(self.agent, name))
+            values = getattr(self.agent, name)
+            if values.dim() < 3:
+                values = values.unsqueeze(dim=-1)
+            par_values[name] = values
         
         count = {}
         percentiles = {}
         for name in par_names:
             count.setdefault(name, 0)
-            par_values[name] = torch.stack(par_values[name])
             for lbl in labels:
                 if lbl.startswith(name):
-                    percentiles[lbl] = par_values[name][count[name]].numpy().reshape(-1)
+                    percentiles[lbl] = par_values[name][..., count[name]].numpy().reshape(-1)
                     count[name] += 1
         
         df_percentiles = pd.DataFrame(percentiles)
@@ -166,7 +167,7 @@ class Inferrer(object):
             for site in model_trace.nodes.values():
                 if site['name'] == 'obs':
                     obs_log_probs[self.notnans] = site['log_prob'].detach()
-                    elbo += obs_log_probs.sum(-1).sum(-1)
+                    elbo += obs_log_probs.sum(0).sum(0)
                 elif site['name'] == 'locs':
                     elbo += site['log_prob'].detach()
             

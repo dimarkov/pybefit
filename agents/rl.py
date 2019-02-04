@@ -32,14 +32,15 @@ class RLSocInf(Discrete):
             self.alpha = x[..., 1].sigmoid()
             self.zeta = x[..., 2].sigmoid()
             self.beta = x[..., 3].exp()
+            self.bias = x[..., 4]
         else:
-            self.V0 = zeros(self.nsub)
-            self.alpha = .25*ones(self.nsub)
-            self.zeta = .95*ones(self.nsub)
-            self.beta = 10.*ones(self.nsub)
+            self.V0 = zeros(self.runs)
+            self.alpha = .25*ones(self.runs)
+            self.zeta = .95*ones(self.runs)
+            self.beta = 10.*ones(self.runs)
         
-        self.npars = 4
-         
+        self.npars = 5
+
         # set initial value vector
         self.values = [self.V0]
         self.offers = []
@@ -51,7 +52,7 @@ class RLSocInf(Discrete):
         V = self.values[-1]
         # update choice values
         self.values.append(V + masks*self.alpha*(outcomes - V))
-    
+
     def planning(self, b, t):
         """Compute response probability from values."""
         
@@ -60,7 +61,7 @@ class RLSocInf(Discrete):
         b_vis = self.offers[-1]
         b_int = b_soc * self.zeta + b_vis * (1 - self.zeta)
         ln = b_int.log() - (1 - b_int).log() 
-        self.logprobs.append(self.beta * ln)    
+        self.logprobs.append(self.beta * ln + self.bias)    
 
     def sample_responses(self, b, t):
         logits = self.logprobs[-1]
