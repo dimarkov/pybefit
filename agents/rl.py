@@ -28,18 +28,17 @@ class RLSocInf(Discrete):
     def set_parameters(self, x=None):
         
         if x is not None:
-            self.V0 = 2*x[..., 0].sigmoid() - 1
-            self.alpha = x[..., 1].sigmoid()
-            self.zeta = x[..., 2].sigmoid()
-            self.beta = x[..., 3].exp()
-            self.bias = x[..., 4]
+            self.alpha = x[..., 0].sigmoid()
+            self.zeta = x[..., 1].sigmoid()
+            self.beta = x[..., 2].exp()
+            self.bias = x[..., 3]
         else:
-            self.V0 = zeros(self.runs)
             self.alpha = .25*ones(self.runs)
             self.zeta = .95*ones(self.runs)
             self.beta = 10.*ones(self.runs)
-        
-        self.npars = 5
+
+        self.V0 = zeros(self.runs)
+        self.npars = 4
 
         # set initial value vector
         self.values = [self.V0]
@@ -55,7 +54,6 @@ class RLSocInf(Discrete):
 
     def planning(self, b, t):
         """Compute response probability from values."""
-        
         V = self.values[-2]
         b_soc = (1 + V)/2
         b_vis = self.offers[-1]

@@ -35,32 +35,30 @@ class HGFSocInf(Discrete):
         
         if x is not None:
             self.mu0 = torch.zeros_like(x[..., :2])
-            self.mu0[..., 0] = x[..., 0]
-            self.mu0[..., 1] = - (x[..., 1]+10).relu() - 2.5
+            self.mu0[..., 0] = 0.
+            self.mu0[..., 1] = -(x[..., 0]+5.).relu() - 2.
             self.pi0 = torch.zeros_like(x[..., 2:4])
-            self.pi0[..., 0] = (x[..., 2]+4).exp() + 1.
-            self.pi0[..., 1] = 2. 
-            self.eta = (x[..., 3]-10).sigmoid()
-            self.zeta = x[..., 4].sigmoid()
-            self.beta = x[..., 5].exp()
-            self.bias = x[..., 6]
+            self.pi0[..., 0] = 2.
+            self.pi0[..., 1] = 2.
+            self.eta = (x[..., 1]-5).sigmoid()
+            self.zeta = x[..., 2].sigmoid()
+            self.beta = x[..., 3].exp()
+            self.bias = x[..., 4]
         else:
             self.mu0 = zeros(self.runs, 2)
             self.pi0 = ones(self.runs, 2) 
             self.eta = .1*ones(self.runs)
             self.zeta = .95*ones(self.runs)
             self.beta = 10.*ones(self.runs)
+            self.bias = zeros(self.runs)
+
+        self.kappa = .5
         
-        self.kappa = .1
-        
-#        self.pi0 = torch.ones_like(self.mu0)
-#        self.pi0[:, 0] = self.pi0_1
-#        self.pi0[:, 1] = 1.        
         #set initial beliefs
         self.mu = [self.mu0]
         self.pi = [self.pi0]
         
-        self.npars = 7       
+        self.npars = 5       
         self.offers = []
         self.logprobs = []
 
@@ -121,7 +119,6 @@ class HGFSocInf(Discrete):
             # zero and prevent the update at all levels. One would expect that 
             	# fixed values provide bad fit to the data.
             warnings.warn('Encountered negative precision on the 3rd level')
-            print(self.pi0[invalid])
             pi[invalid] = 0.
             mu[invalid] = 0.
             
@@ -129,11 +126,15 @@ class HGFSocInf(Discrete):
         self.pi.append(pi)
 
     def planning(self, b, t):
-        gamma = torch.sqrt(1 + 3.14159/(8*self.pi[-2][:, 0]))
+        sig = (self.kappa*self.mu[-2][:, 1]).exp() + self.pi[-2][:, 0]
+        gamma = torch.sqrt(1 + 3.14159*sig/8)
         b_soc = (self.mu[-2][:, 0]/gamma).sigmoid()
+        
         b_vis = self.offers[-1]
+
         b_int = b_soc * self.zeta + b_vis * (1 - self.zeta)
         ln = b_int.log() - (1 - b_int).log()
+
         self.logprobs.append(self.beta * ln + self.bias) 
     
     def sample_responses(self, b, t):
@@ -155,24 +156,23 @@ class SGFSocInf(Discrete):
     def set_parameters(self, x=None):
         
         if x is not None:
-            self.mu0 = x[..., 0]
-            self.rho1 = x[..., 1].exp()
-            self.h = (x[..., 2]-3).sigmoid()
-            self.zeta = x[..., 3].sigmoid()
-            self.beta = x[..., 4].exp()
-            self.bias = x[..., 5]
+            self.rho1 = x[..., 0].exp()
+            self.h = (x[..., 1]-3).sigmoid()
+            self.zeta = x[..., 2].sigmoid()
+            self.beta = x[..., 3].exp()
+            self.bias = x[..., 4]
         else:
-            self.mu0 = zeros(self.runs)
             self.rho1 = .1
             self.h = .05
             self.zeta = .5
             self.beta = 10
         
-        self.theta0 = zeros(self.runs)
         self.sig0 = ones(self.runs)
+        self.mu0 = zeros(self.runs)
+        self.theta0 = zeros(self.runs)
         self.rho2 = 10.
         
-        self.npars = 6
+        self.npars = 5
         # set initial beliefs
         self.mu = [self.mu0]
         self.sig = [self.sig0]
@@ -216,8 +216,9 @@ class SGFSocInf(Discrete):
         self.sig.append(sig)
 
     def planning(self, b, t):
-        gamma = torch.sqrt(1 + self.sig[-2]*3.14159/8)
-        b_soc = (self.mu[-2]/gamma).sigmoid()
+        gamma = torch.sqrt(1 + (self.sig[-2] + self.rho1) * 3.14159 / 8)
+        theta = self.theta[-2]
+        b_soc = (self.mu[-2]/gamma).sigmoid() * (1 - theta) + theta/2
         b_vis = self.offers[-1]
         b_int = b_soc * self.zeta + b_vis * (1 - self.zeta)
         ln = b_int.log() - (1 - b_int).log()
