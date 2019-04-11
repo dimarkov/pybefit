@@ -8,7 +8,7 @@ zeros = torch.zeros
 
 __all__ = [
         'Simulator'
-        ]
+]
 
 class Simulator(object):
     
@@ -25,47 +25,43 @@ class Simulator(object):
         self.responses = [] 
         
         # container for choice outcomes or observations
-        self.stimulus = []
+        self.stimulus = {'offers': [], 'outcomes': []}
 
     def simulate_experiment(self):
-        """Simulates the experiment by iterating through all the blocks and trials, 
-           for each run in parallel. Here we generate responses and outcomes and update 
-           agent's beliefs.
+        """Simulates the experiment by iterating through all the blocks and trials,
+           for each run in parallel. Here we generate responses and outcomes and 
+           update agent's beliefs.
         """
 
         for b in range(self.nb):
             self.responses.append([None])
+            self.stimulus['offers'].append([None])
+            self.stimulus['outcomes'].append([None])
             for t in range(self.nt):
                 #update single trial
-                res = self.responses[-1][-1]
-                self.env.update_environment(b, t, res)
+                offers = self.env.get_offers(b, t)
+                self.agent.planning(b, t, offers)
                 
-                self.stimulus.append(self.env.get_stimulus(b, t)) 
-                                
-                self.agent.update_beliefs(b, t, **self.stimulus[-1])
-                self.agent.planning(b, t)
+                res = self.agent.sample_responses(b, t)
+                response_outcome = self.env.update_environment(b, t, res)
+                self.agent.update_beliefs(b, t, response_outcome)
                 
-                self.responses[-1].append(self.agent.sample_responses(b, t))
-        
+                self.stimulus['offers'][-1].append(offers)
+                self.stimulus['outcomes'][-1].append(response_outcome[-1])
+                self.responses[-1].append(res)
+                
         self._format_stimuli_and_responses()
     
     def _format_stimuli_and_responses(self):
-        stimuli = {}
-        for s in self.stimulus:
-            names = s.keys()
-            for name in names:
-                stimuli.setdefault(name, [])
-                stimuli[name].append(s[name])
-        
-        for name in stimuli.keys():
-            stimuli[name] = torch.stack(stimuli[name]).reshape(self.nb, self.nt, self.runs)
-        
-        self.stimuli = stimuli
         
         for b in range(self.nb):
+            self.stimulus['offers'][b] = torch.stack(self.stimulus['offers'][b][1:])
+            self.stimulus['outcomes'][b] = torch.stack(self.stimulus['outcomes'][b][1:])
             self.responses[b] = torch.stack(self.responses[b][1:])
         
         self.responses = torch.stack(self.responses)
+        self.stimulus['offers'] = torch.stack(self.stimulus['offers'])
+        self.stimulus['outcomes'] = torch.stack(self.stimulus['outcomes'])
     
             
 

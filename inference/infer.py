@@ -4,6 +4,7 @@ different modules that govern agent's behavior.
 
 from tqdm import tqdm
 import pandas as pd
+import numpy as np
 
 import torch
 from torch import zeros, ones, tensor
@@ -19,7 +20,7 @@ __all__ = [
 
 class Inferrer(object):
     
-    def __init__(self, agent, stimulus, responses, mask = None, fixed_params = None):
+    def __init__(self, agent, stimulus, responses, mask=None, fixed_params=None):
         
         self.agent = agent # agent used for computing response probabilities
         self.stimulus = stimulus # stimulus and action outcomes presented to each participant
@@ -31,23 +32,21 @@ class Inferrer(object):
         # parameter values
         if mask is not None:
             self.notnans = mask
-            self.mask = mask.float()
         else:
-            self.notnans = ones(self.runs, self.nb, self.nt, dtype=torch.uint8)
-            self.mask = ones(self.runs, self.nb, self.nt)
+            self.notnans = ones(self.nb, self.nt, self.runs, dtype=torch.uint8)
             
         if fixed_params is not None:
             n_fixed = len(fixed_params['labels'])
-            self.npar = agent.npars - n_fixed
+            self.npar = agent.npar - n_fixed
             
             self.locs = {}
             self.locs['fixed'] = fixed_params['labels']
-            self.locs['free'] = list(set(range(agent.npars)) - \
+            self.locs['free'] = list(set(range(agent.npar)) - \
                                 set(fixed_params['labels']))
             self.values = fixed_params['values']
             self.fixed_values = True
         else:
-            self.npar = agent.npars
+            self.npar = agent.npar
             self.fixed_values = False
 
     def model(self):
@@ -124,8 +123,8 @@ class Inferrer(object):
             x[..., self.locs['free']] = locs.detach()
         else:
             x = locs.detach()
-            
-        self.agent.set_parameters(x)
+        
+        self.agent.set_parameters(x, set_variables=False)
         
         par_values = {}
         for name in par_names:
@@ -159,18 +158,20 @@ class Inferrer(object):
         
         model = self.model
         guide = self.guide
+        notnans = self.notnans
         
         elbo = zeros(self.runs)
         for i in range(num_particles):
             model_trace, guide_trace = get_importance_trace('flat', max_plate_nesting, model, guide)
-            obs_log_probs = zeros(self.mask.shape)
+            obs_log_probs = zeros(notnans.shape)
             for site in model_trace.nodes.values():
-                if site['name'] == 'obs':
-                    obs_log_probs[self.notnans] = site['log_prob'].detach()
-                    elbo += obs_log_probs.sum(0).sum(0)
+                if site['name'].startswith('obs'):
+                    b, t = np.array(site['name'].split('_')[-2:]).astype(int)
+                    obs_log_probs[b, t, notnans[b, t]] = site['log_prob'].detach()
                 elif site['name'] == 'locs':
                     elbo += site['log_prob'].detach()
-            
+            elbo += torch.einsum('ijk->k', obs_log_probs)
+
             for site in guide_trace.nodes.values():
                 if site['name'] == 'locs':
                     elbo -= site['log_prob'].detach()

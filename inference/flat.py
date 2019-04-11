@@ -19,7 +19,7 @@ __all__ = [
 
 class Normal(Inferrer):
     
-    def __init__(self, agent, stimulus, responses, mask = None, fixed_params = None):
+    def __init__(self, agent, stimulus, responses, mask=None, fixed_params=None):
         super(Normal, self).__init__(agent, stimulus, responses, mask=mask, fixed_params=fixed_params)
 
     def model(self):
@@ -27,11 +27,19 @@ class Normal(Inferrer):
         Generative model of behavior with flat (normal) prior over free model parameters.
         """
         nsub = self.runs #number of subjects
-        npar = self.npars #number of parameters
-
+        npar = self.npar #number of parameters
+        
+        # define hyper priors over model parameters.
+        # each model parameter has a hyperpriors defining group level mean
+        m = param('m', zeros(npar))
+        s = param('s', ones(npar), constraint=constraints.positive)
+        
+        # each subject has a hyper prior definig subject specific prior uncertainty
+        rho = param('rho', ones(nsub, npar), constraint=constraints.positive)
+        
         # define prior mean over model parametrs and subjects
-        with plate('subjects', nsub):
-                locs = sample('locs', dist.Normal(zeros(npar), 20.*ones(npar)).to_event(1))
+        with plate('subjects', nsub) as ind:
+                locs = sample('locs', dist.Normal(m, s*rho[ind]).to_event(1))
                 
         if self.fixed_values:
             x = zeros(nsub, self.agent.npars)
@@ -44,18 +52,28 @@ class Normal(Inferrer):
         
         for b in range(self.nb):
             for t in range(self.nt):
+                notnans = self.notnans[b, t]
+                mask = self.mask[b, t]                
+
                 #update single trial
-                states = self.stimulus['states'][:,b,t]
-                offers = self.stimulus['offers'][:,b,t]
+                offers = self.stimulus['offers'][b, t]
+                self.agent.planning(b, t, offers)
                 
-                self.agent.update_beliefs(b, t, states, offers)
-                self.agent.planning(b,t)
-        
-        logits = self.agent.logprobs[self.notnans]        
-        responses = self.rdata[self.notnans]
-        
-        with plate('observations', responses.shape[0]):
-            sample('obs', dist.Categorical(logits=logits), obs=responses)
+                logits = self.agent.logits[-1]
+                
+                outcomes = self.stimulus['outcomes'][b, t]
+                responses = self.responses[b, t]
+                
+                mask = self.stimulus['mask'][b, t]
+                
+                self.agent.update_beliefs(b, t, [responses, outcomes], mask=mask)
+                
+                if torch.any(notnans):
+                    lgs = logits[notnans]
+                    res = responses[notnans]
+                    
+                    with plate('responses_{}_{}'.format(b, t), len(res)):
+                        sample('obs_{}_{}'.format(b, t), dist.Categorical(logits=lgs), obs=res)
             
     def guide(self):
         """Approximate posterior for the horseshoe prior. We assume posterior in the form 
@@ -63,7 +81,7 @@ class Normal(Inferrer):
         and multivariate normal distribution for the parameters of each subject independently.
         """
         nsub = self.runs #number of subjects
-        npar = self.npars #number of parameters
+        npar = self.npar #number of parameters
         
         m_locs = param('m_locs', zeros(nsub, npar))
         st_locs = param('scale_tril_locs', torch.eye(npar).repeat(nsub, 1, 1), 
@@ -79,7 +97,7 @@ class Normal(Inferrer):
         infer_posterior has finished execution.
         """
         nsub = self.runs
-        npar = self.npars
+        npar = self.npar
         assert npar == len(labels)
         
         trans_pars = zeros(n_samples, nsub, npar)
