@@ -246,8 +246,8 @@ class BayesTempRevLearn(Discrete):
     def set_parameters(self, x=None, set_variables=True):
         self.npar = 6
         if x is not None:
-            self.delta = x[..., 0].exp()
-            self.rho = x[..., 1]
+            self.delta = x[..., 0].sigmoid()
+            self.rho = x[..., 1].exp()
             self.beta = x[..., 2].exp()
             self.lam = x[..., 3].sigmoid()
             self.ph = (x[..., 4]+1.).sigmoid()*.5 + .5
@@ -275,13 +275,17 @@ class BayesTempRevLearn(Discrete):
     def set_prior_beliefs(self):
         ps = ones(self.ns)/self.ns
         
-        lnd = torch.arange(1., self.nd + 1.).log()
-        mu = self.rho.reshape(-1, 1)
-        sig = self.delta.reshape(-1, 1)
-                
-        #lbinom = torch.lgamma(rho + d) - torch.lgamma(d) - torch.lgamma(rho)
-        #self.pd = lbinom.exp()*torch.pow(1-delta, d)*torch.pow(delta, rho)
+        d = torch.arange(1., self.nd + 1.)
+        rho = self.rho.reshape(-1, 1)
+        delta = self.delta.reshape(-1, 1)
         
+        #lbinom = torch.lgamma(rho + d - 1) - torch.lgamma(d) - torch.lgamma(rho)
+        #self.pd = torch.softmax(lbinom + (d-1)*(1-delta).log() + rho*delta.log(), -1)
+        
+        mu = (delta/(1-delta)).log()
+        sig = rho
+
+        lnd = d.log()
         self.pd = torch.softmax(-(lnd-mu)**2/sig - sig.log()/2 - lnd, -1)
         
         P = self.pd.reshape(self.runs, 1, self.nd)*ps.reshape(1, -1, 1)
