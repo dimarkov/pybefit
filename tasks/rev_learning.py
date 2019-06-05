@@ -29,20 +29,29 @@ class SocialInfluence(object):
         # set stimuli 
         self.stimuli = stimuli
         
+    
+    def get_offers(self, block, trial):
+        offers = self.stimuli['offers'][block, trial]
+        
+        return offers
+        
     def update_environment(self, block, trial, responses):
         """Generate stimuli for the current block and trial
         """        
-        outcomes = self.stimuli['reliability'][block, trial]
-        offers = self.stimuli['offers'][block, trial]
+        reliability = self.stimuli['reliability'][block, trial]
+        reward_if_follow = 2*reliability - 1
+        reward_if_reject = - reward_if_follow
+        reward = torch.stack([reward_if_reject, reward_if_follow], -1)
         
-        self.stimulus = {'outcomes': outcomes,
-                      'offers': offers}
-    
+        # list of different outcomes
+        # 0 - is advice reliable (0,1)
+        # 1 - reward if one would follow the advice
+        # 2 - reward dependent on agents choice
         
-    def get_stimulus(self, *args):
-        """Returns dictionary of all stimuli values relevant for update of agent's beliefs.
-        """
-        return self.stimulus
+        outcomes = torch.stack([reward_if_follow, reward[range(len(responses)), responses]], -1)
+        
+        return [responses, outcomes]
+
     
 class TempRevLearn(object):
     """Implementation of the temporal reversal learning task. 

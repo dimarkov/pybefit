@@ -59,14 +59,15 @@ class HGFSocInf(Discrete):
         self.mu = [self.mu0]
         self.pi = [self.pi0]
         
-        self.npars = 5       
+        self.npar = 5       
         self.offers = []
-        self.logprobs = []
+        self.logits = []
 
-    def update_beliefs(self, b, t, outcomes=None, offers=None, masks=1):
+    def update_beliefs(self, b, t, response_outcomes, mask=None):
         
-        self.offers.append(offers)
-
+        if mask is None:
+            mask = ones(self.runs)
+        
         mu = [] 
         pi = []
         
@@ -87,21 +88,23 @@ class HGFSocInf(Discrete):
         # Updates
         pihat1 = pi_pre[:, 0]/(1 + pi_pre[:, 0]*w1)
 
-        pi1 = pihat1 + masks * muhat * (1-muhat)
-        wda = masks * ( (outcomes + 1)/2 - muhat) / pi1
+        pi1 = pihat1 + mask * muhat * (1-muhat)
+        
+        o = response_outcomes[-1][:, -2]  # observation       
+        wda = mask * ( (o + 1)/2 - muhat) / pi1
         mu.append(mu_pre[:, 0] + wda)
         pi.append(pi1)
 
 
         # Volatility prediction error
-        da1 = masks * ((1 / pi1 + (wda)**2) * pihat1 - 1)
+        da1 = mask * ((1 / pi1 + (wda)**2) * pihat1 - 1)
 
         # 3rd level
         # Precision of prediction
         pihat2 = pi_pre[:, 1] / (1. + pi_pre[:, 1] * self.eta)
 
         # Weighting factor
-        w2 = w1 * pihat1 * masks
+        w2 = w1 * pihat1 * mask
 
         # Updates
         pi2 = pihat2 + self.kappa**2 * w2 * (w2 + (2 * w2 - 1) * da1) / 2
@@ -126,23 +129,27 @@ class HGFSocInf(Discrete):
         self.mu.append(mu)
         self.pi.append(pi)
 
-    def planning(self, b, t):
-        sig = (self.kappa*self.mu[-2][:, 1]).exp() + self.pi[-2][:, 0]
-        gamma = torch.sqrt(1 + 3.14159*sig/8)
-        b_soc = (self.mu[-2][:, 0]/gamma).sigmoid()
+    def planning(self, b, t, offers):
         
-        b_vis = self.offers[-1]
+        sig = (self.kappa*self.mu[-1][:, 1]).exp() + self.pi[-1][:, 0]
+        gamma = torch.sqrt(1 + 3.14159*sig/8)
+        b_soc = (self.mu[-1][:, 0]/gamma).sigmoid()
+        
+        b_vis = offers
 
         b_int = b_soc * self.zeta + b_vis * (1 - self.zeta)
         ln = b_int.log() - (1 - b_int).log()
-
-        self.logprobs.append(self.beta * ln + self.bias) 
+        
+        logits = self.beta * ln + self.bias
+        logits = torch.stack([-logits, logits], -1)
+        
+        self.logits.append(logits) 
     
     def sample_responses(self, b, t):
-        logits = self.logprobs[-1]
-        bern = Bernoulli(logits=logits)
+
+        cat = Categorical(logits=self.logits[-1])
        
-        return bern.sample()
+        return cat.sample()
 
 class SGFSocInf(Discrete):
     
@@ -173,19 +180,21 @@ class SGFSocInf(Discrete):
         self.theta0 = zeros(self.runs)
         self.rho2 = 10.
         
-        self.npars = 5
+        self.npar = 5
         # set initial beliefs
         self.mu = [self.mu0]
         self.sig = [self.sig0]
 
         self.theta = [self.theta0]
-        self.logprobs = []
+        self.logits = []
         self.offers = []
         
-    def update_beliefs(self, b, t, outcomes=None, offers=None, masks=1):
+    def update_beliefs(self, b, t, response_outcomes, mask=None):
         
-        self.offers.append(offers)
-        o = (outcomes + 1.)/2.
+        if mask is None:
+            mask = ones(self.runs)
+        
+        o = (response_outcomes[-1][:, -2] + 1.)/2.
 
     	# 1st level
     	# Prediction
@@ -193,13 +202,13 @@ class SGFSocInf(Discrete):
 
     	# Update the precision and the expectation conditioned on the absence of a change
         sig_pre = self.sig[-1]
-        sig1 = (sig_pre + self.rho1) / (1 + (sig_pre + self.rho1) * masks * muhat * (1-muhat))
-        mu1 = self.mu[-1] + sig1 * masks * (o - muhat)
+        sig1 = (sig_pre + self.rho1) / (1 + (sig_pre + self.rho1) * mask * muhat * (1-muhat))
+        mu1 = self.mu[-1] + sig1 * mask * (o - muhat)
 
 
     	# Update the precision and the expectation conditioned on the presence of a change
         sig2 =  self.rho2
-        mu2 = masks * sig2 * (o - .5)
+        mu2 = mask * sig2 * (o - .5)
 
     	# marginal observation likelihood
         gamma = torch.sqrt(1 + sig_pre * 3.14159 / 8)
@@ -216,20 +225,28 @@ class SGFSocInf(Discrete):
         self.theta.append(theta)
         self.sig.append(sig)
 
-    def planning(self, b, t):
-        gamma = torch.sqrt(1 + (self.sig[-2] + self.rho1) * 3.14159 / 8)
-        theta = self.theta[-2]
-        b_soc = (self.mu[-2]/gamma).sigmoid() * (1 - theta) + theta/2
-        b_vis = self.offers[-1]
+    def planning(self, b, t, offers):
+        gamma = torch.sqrt(1 + (self.sig[-1] + self.rho1) * 3.14159 / 8)
+        theta = self.theta[-1]
+        
+        b_soc = (self.mu[-1]/gamma).sigmoid() * (1 - theta) + theta/2
+        
+        b_vis = offers
+        
         b_int = b_soc * self.zeta + b_vis * (1 - self.zeta)
+        
         ln = b_int.log() - (1 - b_int).log()
-        self.logprobs.append(self.beta * ln + self.bias)
+        
+        logits = self.beta * ln + self.bias
+        logits = torch.stack([-logits, logits], -1)
+        
+        self.logits.append(logits)
     
     def sample_responses(self, b, t):
-        logits = self.logprobs[-1]
-        bern = Bernoulli(logits=logits)
+
+        cat = Categorical(logits=self.logits[-1])
        
-        return bern.sample()
+        return cat.sample()
     
 class BayesTempRevLearn(Discrete):
     

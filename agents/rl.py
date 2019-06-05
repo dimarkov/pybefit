@@ -45,29 +45,35 @@ class RLSocInf(Discrete):
         # set initial value vector
         self.values = [self.V0]
         self.offers = []
-        self.logprobs = []
+        self.logits = []
         
-    def update_beliefs(self, b, t, outcomes=None, offers=None, masks=1):
+    def update_beliefs(self, b, t, response_outcomes, mask=None):
         
-        self.offers.append(offers)
+        if mask is None:
+            mask = ones(self.runs)  
+        
         V = self.values[-1]
+        o = response_outcomes[-1][:, -2]
+        
         # update choice values
-        self.values.append(V + masks*self.alpha*(outcomes - V))
+        self.values.append(V + mask*self.alpha*(o - V))
 
-    def planning(self, b, t):
+    def planning(self, b, t, offers):
         """Compute response probability from values."""
-        V = self.values[-2]
+        V = self.values[-1]
         b_soc = (1 + V)/2
-        b_vis = self.offers[-1]
+        b_vis = offers
         b_int = b_soc * self.zeta + b_vis * (1 - self.zeta)
-        ln = b_int.log() - (1 - b_int).log() 
-        self.logprobs.append(self.beta * ln + self.bias)    
+        ln = b_int.log() - (1 - b_int).log()
+        
+        logits = self.beta * ln + self.bias
+        logits = torch.stack([-logits, logits], -1)
+        self.logits.append(logits)    
 
     def sample_responses(self, b, t):
-        logits = self.logprobs[-1]
-        bern = Bernoulli(logits=logits)
+        cat = Categorical(logits=self.logits[-1])
        
-        return bern.sample()
+        return cat.sample()
     
 class RLTempRevLearn(Discrete):
     """here we implement a reinforcement learning agent for the temporal 
