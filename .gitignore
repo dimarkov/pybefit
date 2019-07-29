@@ -1,3 +1,4 @@
+.chglog
 examples/**/.ipynb_checkpoints/
 *.pyc
 __pycache__
