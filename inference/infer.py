@@ -33,7 +33,7 @@ class Inferrer(object):
         if mask is not None:
             self.notnans = mask
         else:
-            self.notnans = ones(self.nb, self.nt, self.runs, dtype=torch.uint8)
+            self.notnans = ones(self.nb, self.nt, self.runs, dtype=torch.bool)
             
         if fixed_params is not None:
             n_fixed = len(fixed_params['labels'])
@@ -64,7 +64,7 @@ class Inferrer(object):
                         iter_steps = 1000,
                         num_particles = 10,
                         optim_kwargs = {'lr':.1}):
-        """Perform stochastic variational inference over free model parameters.
+        """Perform SVI over free model parameters.
         """
 
         clear_param_store()
@@ -80,6 +80,8 @@ class Inferrer(object):
         for step in pbar:
             loss.append(svi.step())
             pbar.set_description("Mean ELBO %6.2f" % tensor(loss[-20:]).mean())
+            if np.isnan(loss[-1]):
+                break
                 
         self.loss = loss
 
@@ -166,10 +168,10 @@ class Inferrer(object):
             obs_log_probs = zeros(notnans.shape)
             for site in model_trace.nodes.values():
                 if site['name'].startswith('obs'):
-                    b, t = np.array(site['name'].split('_')[-2:]).astype(int)
-                    obs_log_probs[b, t, notnans[b, t]] = site['log_prob'].detach()
+                    obs_log_probs[notnans] = site['log_prob'].detach()
                 elif site['name'] == 'locs':
                     elbo += site['log_prob'].detach()
+            
             elbo += torch.einsum('ijk->k', obs_log_probs)
 
             for site in guide_trace.nodes.values():

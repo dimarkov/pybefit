@@ -15,6 +15,8 @@ from torch.distributions import Bernoulli, Categorical
 
 from .agent import Discrete
 
+softplus = torch.nn.functional.softplus
+
 __all__ = [
         'HGFSocInf',
         'SGFSocInf',
@@ -260,25 +262,27 @@ class BayesTempRevLearn(Discrete):
         
         self.nd = 100
 
-    def set_parameters(self, x=None, set_variables=True):
-        self.npar = 6
+    def set_parameters(self, x=None, set_variables=True, s0=0.):
+        self.npar = 7
         if x is not None:
-            self.delta = x[..., 0].sigmoid()
-            self.rho = x[..., 1].exp()
+            self.mu = softplus(x[..., 0] + 20)
+            self.sigma = (5 + x[..., 1]).exp()
             self.beta = x[..., 2].exp()
             self.lam = x[..., 3].sigmoid()
-            self.ph = (x[..., 4]+1.).sigmoid()*.5 + .5
-            self.pl = (x[..., 5]-1.).sigmoid()*.5
+            self.s0 = x[..., 4].sigmoid()
+            self.ph = (x[..., 5]+1.).sigmoid()*.5 + .5
+            self.pl = (x[..., 6]-1.).sigmoid()*.5
         else:
-            self.delta = .05*ones(self.runs)
-            self.rho = ones(self.runs)
+            self.mu = 20*ones(self.runs)
+            self.sigma = 25*ones(self.runs)
             self.beta = 10.*ones(self.runs)
             self.lam = ones(self.runs)
             self.ph = .8*ones(self.runs)
             self.pl = .2*ones(self.runs)
-        
+            self.s0 = .5*ones(self.runs)
+               
         if set_variables:
-            self.U = torch.stack([-ones(self.runs), ones(self.runs), 2*self.lam-1, 2*self.lam-1], dim=-1)
+            self.U = torch.stack([-ones(self.runs), ones(self.runs), 2 * self.lam - 1, 2 * self.lam - 1], dim=-1)
             self.set_prior_beliefs()
             self.set_state_transition_matrix()
             self.set_observation_likelihood()
@@ -290,22 +294,21 @@ class BayesTempRevLearn(Discrete):
             self.logits = []
     
     def set_prior_beliefs(self):
-        ps = ones(self.ns)/self.ns
+        ps = torch.stack([self.s0, 1 - self.s0], -1)
         
-        d = torch.arange(1., self.nd + 1.)
-        rho = self.rho.reshape(-1, 1)
-        delta = self.delta.reshape(-1, 1)
+        d = torch.arange(1., self.nd + 1.).reshape(1, -1)
+        mu = self.mu.reshape(-1, 1)
+        sigma = self.sigma.reshape(-1, 1)
+        alpha = mu**2/sigma
+        theta = mu/sigma
         
-        #lbinom = torch.lgamma(rho + d - 1) - torch.lgamma(d) - torch.lgamma(rho)
-        #self.pd = torch.softmax(lbinom + (d-1)*(1-delta).log() + rho*delta.log(), -1)
-        
-        mu = (delta/(1-delta)).log()
-        sig = rho
-
         lnd = d.log()
-        self.pd = torch.softmax(-(lnd-mu)**2/sig - sig.log()/2 - lnd, -1)
         
-        P = self.pd.reshape(self.runs, 1, self.nd)*ps.reshape(1, -1, 1)
+        self.pd = torch.softmax(- d * theta + lnd * (alpha - 1.), -1)
+        
+#        self.pd = torch.softmax(- (lnd - alpha)**2/theta - lnd, -1)
+        
+        P = self.pd.reshape(self.runs, 1, self.nd)*ps.reshape(self.runs, self.ns, 1)
         self.beliefs = [P]
 
     def set_state_transition_matrix(self):
@@ -314,7 +317,7 @@ class BayesTempRevLearn(Discrete):
         
         tm_ssd = zeros(self.ns, self.ns, self.nd)
         tm_ssd[..., 1:] = torch.eye(self.ns).reshape(self.ns, self.ns, 1)
-        tm_ssd[..., 0] = ones(self.ns, self.ns) - torch.eye(self.ns)
+        tm_ssd[..., 0] = (ones(self.ns, self.ns) - torch.eye(self.ns))/(self.ns - 1)
         
         self.tm_dd = tm_dd
         self.tm_ssd = tm_ssd
@@ -366,11 +369,11 @@ class BayesTempRevLearn(Discrete):
         offers = self.offers[-1]
         
         prior = self.beliefs[-1]
-        lik = mask.reshape(-1, 1)*self.likelihood[range(self.runs), offers, res, :, out]
-        lik[mask == 0] = 1.
+        
+        lik = 1. + mask.reshape(-1, 1) * (self.likelihood[range(self.runs), offers, res, :, out] - 1.)
         
         posterior = lik.reshape(self.runs, self.ns, 1) * prior
-        norm = posterior.reshape(self.runs, -1).sum(-1).reshape(self.runs, 1, 1)
+        norm = posterior.reshape(self.runs, -1).sum(-1).reshape(-1, 1, 1)
         
         prediction = torch.einsum('nij,klj,nlj->nki', self.tm_dd, self.tm_ssd, posterior/norm)
 
@@ -382,22 +385,24 @@ class BayesTempRevLearn(Discrete):
            Here offers encode location of stimuli A and B.
         """
         self.offers.append(offers)
+        subs = list(range(self.runs))
         
-        lik = self.likelihood[range(self.runs), offers]
-        ps = self.beliefs[-1].sum(-1)
-        joint = lik*ps.reshape(self.runs, 1, self.ns, 1)
-        marginal = torch.sum(joint, -2) 
-        entropy = self.entropy[range(self.runs), offers]
+        lik = self.likelihood[subs, offers]
+        entropy = self.entropy[subs, offers]
 
-        H = -torch.sum(marginal*(marginal+1e-16).log(), dim=-1)
-        V = torch.sum(marginal*self.U.reshape(self.runs, 1, -1), -1)
-        C = torch.sum(entropy.reshape(self.runs, self.na, -1)*ps.reshape(self.runs, 1, -1), -1)
+        psd = self.beliefs[-1]
+
+        marginal = torch.einsum('naso,nsd->nao', lik, psd) 
+
+        H = -torch.sum(marginal * (marginal + 1e-16).log(), -1)
+        V = torch.einsum('nao,no->na', marginal, self.U)
+        C = torch.einsum('nas,nsd->na', entropy, psd)
         
         self.values.append(V)
         self.obs_entropy.append(C)
         self.pred_entropy.append(H)
         
-        self.logits.append(self.beta.reshape(-1, 1)*(V + H - C))   
+        self.logits.append(self.beta.reshape(-1, 1) * (V + H - C))   
     
     def sample_responses(self, b, t):
         logits = self.logits[-1]

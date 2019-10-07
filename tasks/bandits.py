@@ -50,8 +50,7 @@ class MultiArmedBandit(object):
             trials = self.trials
             nsub = self.nsub
             
-            ns, nf = self.priors['probs'].shape[1:]
-
+            ns, nf = self.priors['probs'].shape
             self.states = {'points': zeros(blocks, trials+1, nsub, nf, dtype=torch.long),
                            'probs': zeros(blocks, trials+1, nsub, ns, nf),
                            'locations': zeros(blocks, trials+1, nsub, dtype=torch.long) }
@@ -63,7 +62,7 @@ class MultiArmedBandit(object):
         if trial == 0:
             self.update_states(block, trial)
             return {'locations': self.states['locations'][block, trial], 
-                'ponts': self.states['points'][block, trial]}
+                'points': self.states['points'][block, trial]}
             
         else:
             return {'locations': self.states['locations'][block, trial], 
@@ -75,7 +74,7 @@ class MultiArmedBandit(object):
             self.states['points'][block, trial] = 0
             
             if block == 0:
-                probs =  self.priors['probs'][0]
+                probs =  self.priors['probs']
                 self.states['probs'][block, trial] = probs
             else:
                 self.states['probs'][block, trial] = self.states['probs'][block-1, -1]
@@ -92,7 +91,7 @@ class MultiArmedBandit(object):
             return zeros(self.nsub)
         else:
             success = torch.any(self.states['points'][block, trial, :, 1:] > 2*self.trials//3, -1)
-            return success.float()
+            return success.long()
         
     def update_environment(self, block, trial, responses):
         """Generate stimuli for the current block and trial and update the state
@@ -106,10 +105,13 @@ class MultiArmedBandit(object):
 
         # each selected arm is associated with specific set of reward probabilities
         probs = self.states['probs'][block, trial, range(self.nsub), arm_types]
-        out1 = Multinomial(probs=probs).sample()        
+        out1 = Multinomial(probs=probs).sample()
+
+        out = {'locations': responses,
+               'features': out1.argmax(-1)}        
         
         out2 = self.update_states(block, trial+1, responses=responses, outcomes=out1)
             
-        return [responses, (out1, out2)]
+        return [responses, (out, out2)]
     
         

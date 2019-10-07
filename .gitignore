@@ -3,3 +3,5 @@ examples/**/.ipynb_checkpoints/
 *.pyc
 __pycache__
 examples/**/*.svg
+examples/**/*.pdf
+examples/**/*.png
