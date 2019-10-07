@@ -32,5 +32,5 @@ ip install pyro-ppl
 License
 -------
 
-See [license](LICENSE)
+See [license](LICENSE.md)
 
