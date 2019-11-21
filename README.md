@@ -26,7 +26,7 @@ First setup an environment using anaconda prompt (or just terminal in linux):
 conda create -n befit python=3 numpy pandas matplotlib seaborn
 conda activate befit
 conda install pytorch -c pytorch
-ip install pyro-ppl
+pip install pyro-ppl
 ```
 
 License
