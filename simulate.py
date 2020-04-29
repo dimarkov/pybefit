@@ -59,8 +59,7 @@ class Simulator(object):
                 
     def format_stimuli_and_responses(self):
         
-        for key in self.stimuli.keys():
-            
+        for key in self.stimuli:
             for b in range(self.nb):
                 self.stimuli[key]['offers'][b] = torch.stack(self.stimuli[key]['offers'][b][1:])
                 self.stimuli[key]['outcomes'][b] = torch.stack(self.stimuli[key]['outcomes'][b][1:])

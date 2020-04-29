@@ -266,7 +266,7 @@ class BayesTempRevLearn(Discrete):
         self.npar = 7
         if x is not None:
             self.mu = softplus(x[..., 0] + 20)
-            self.sigma = (5 + x[..., 1]).exp()
+            self.tau = x[..., 1].exp()
             self.beta = x[..., 2].exp()
             self.lam = x[..., 3].sigmoid()
             self.s0 = x[..., 4].sigmoid()
@@ -298,15 +298,15 @@ class BayesTempRevLearn(Discrete):
         
         d = torch.arange(1., self.nd + 1.).reshape(1, -1)
         mu = self.mu.reshape(-1, 1)
-        sigma = self.sigma.reshape(-1, 1)
-        alpha = mu**2/sigma
-        theta = mu/sigma
+        tau = self.tau.reshape(-1, 1)
+        alpha = 1/tau
+        theta = tau * mu
         
         lnd = d.log()
         
-        self.pd = torch.softmax(- d * theta + lnd * (alpha - 1.), -1)
+        self.pd = torch.softmax(- d / theta + lnd * (alpha - 1.), -1)
         
-#        self.pd = torch.softmax(- (lnd - alpha)**2/theta - lnd, -1)
+#        self.pd = torch.softmax(- .5 * tau * (lnd - mu)**2 - lnd, -1)
         
         P = self.pd.reshape(self.runs, 1, self.nd)*ps.reshape(self.runs, self.ns, 1)
         self.beliefs = [P]
