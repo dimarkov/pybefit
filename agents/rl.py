@@ -1,4 +1,4 @@
-   #!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 This module contain reinforcement learning agents for various experimental tasks
@@ -8,7 +8,7 @@ Created on Mon Jan 21 13:50:01 2019
 """
 
 import torch
-from torch import ones, zeros, arange
+from torch import ones, zeros, zeros_like, arange
 from torch.distributions import Categorical
 
 from .agent import Discrete
@@ -18,17 +18,18 @@ __all__ = [
         'RLTempRevLearn'
 ]
 
+
 class RLSocInf(Discrete):
-    
+
     def __init__(self, runs=1, blocks=1, trials=1):
-        
-        na = 2  #  number of actions
-        ns = 2  #  number of states
-        no = 2  #  number of outcomes
+
+        na = 2  # number of actions
+        ns = 2  # number of states
+        no = 2  # number of outcomes
         super(RLSocInf, self).__init__(runs, blocks, trials, na, ns, no)
-        
+
     def set_parameters(self, x=None):
-        
+
         if x is not None:
             self.alpha = x[..., 0].sigmoid()
             self.zeta = x[..., 1].sigmoid()
@@ -46,15 +47,15 @@ class RLSocInf(Discrete):
         self.values = [self.V0]
         self.offers = []
         self.logits = []
-        
+
     def update_beliefs(self, b, t, response_outcomes, mask=None):
-        
+
         if mask is None:
-            mask = ones(self.runs)  
-        
+            mask = ones(self.runs)
+
         V = self.values[-1]
         o = response_outcomes[-1][:, -2]
-        
+
         # update choice values
         self.values.append(V + mask*self.alpha*(o - V))
 
@@ -65,87 +66,93 @@ class RLSocInf(Discrete):
         b_vis = offers
         b_int = b_soc * self.zeta + b_vis * (1 - self.zeta)
         ln = b_int.log() - (1 - b_int).log()
-        
+
         logits = self.beta * ln + self.bias
         logits = torch.stack([-logits, logits], -1)
-        self.logits.append(logits)    
+        self.logits.append(logits)
 
     def sample_responses(self, b, t):
         cat = Categorical(logits=self.logits[-1])
-       
+
         return cat.sample()
-    
+
+
 class RLTempRevLearn(Discrete):
-    """here we implement a reinforcement learning agent for the temporal 
-    reversal learning task.    
+    """here we implement a reinforcement learning agent for the temporal
+    reversal learning task.
     """
-    
+
     def __init__(self, runs=1, blocks=1, trials=1):
-        
-        na = 3  #  number of actions
-        ns = 2  #  number of states
-        no = 4  #  number of outcomes
+
+        na = 3  # number of actions
+        ns = 2  # number of states
+        no = 4  # number of outcomes
         super(RLTempRevLearn, self).__init__(runs, blocks, trials, na, ns, no)
-        
+
     def set_parameters(self, x=None, set_variables=True):
-        
+
         if x is not None:
             self.alpha = x[..., 0].sigmoid()
             self.kappa = x[..., 1].sigmoid()
             self.beta = x[..., 2].exp()
-            self.bias = x[..., 3]
+            self.theta = x[..., 3]
+            self.batch = x.shape[:-1]
         else:
             self.alpha = .25*ones(self.runs)
             self.kappa = ones(self.runs)
             self.beta = 10.*ones(self.runs)
-            self.bias = zeros(self.runs)
-            
+            self.theta = zeros(self.runs)
+            self.batch = (self.runs,)
+
         if set_variables:
-            self.V0 = zeros(self.runs, self.na)
-            self.V0[:, -1] = self.bias
+            self.V0 = zeros(self.batch + (self.na,))
+            self.V0[..., -1] = self.theta
             self.npar = 4
-        
+
             # set initial value vector
             self.values = [self.V0]
             self.offers = []
             self.outcomes = []
             self.logits = []
-        
+
     def update_beliefs(self, b, t, response_outcome, mask=None):
-        
+
         if mask is None:
             mask = ones(self.runs)
-        
+
         V = self.values[-1]
-        
+
         res = response_outcome[0]
         obs = response_outcome[1]
-        
-        hints = res == 2
+
+        hints = res == 2  # exploratory choices
         nothints = ~hints
         lista = arange(self.runs)
-        
+
+        alpha = self.alpha[..., nothints]
+        kappa = self.kappa[..., nothints]
+
         # update choice values
-        V_new = zeros(self.runs, self.na)
-        V_new[:, -1] = self.bias
-        
+        V_new = zeros_like(V)
+        V_new[..., -1] = self.theta
+
         if torch.get_default_dtype() == torch.float32:
             rew = 2.*obs[nothints].float() - 1.
         else:
             rew = 2.*obs[nothints].double() - 1.
-        
+
         choices = res[nothints]
-        l = lista[nothints]
-        V1 = V[l, choices]
-        V_new[l, choices] = V1 + self.alpha[nothints] * mask[nothints] * (rew - V1)
-        
-        V2 = V[l, 1 - choices]
-        V_new[l, 1 - choices] = V2 - \
-            self.alpha[nothints] * self.kappa[nothints] * mask[nothints] * (rew + V2)
-        
+        loc = lista[nothints]
+        V1 = V[..., loc, choices]
+        V_new[..., loc, choices] = V1 + alpha * mask[nothints] * (rew - V1)
+
+        V2 = V[..., loc, 1 - choices]
+        V_new[..., loc, 1 - choices] = V2 - alpha * kappa * mask[nothints] * (rew + V2)
+
         cue = obs[hints] - 2
-        V_new[hints, cue] = 1.
-        V_new[hints, 1 - cue] = - self.kappa[hints]
+        loc = lista[hints]
+        V_new[..., loc, cue] = 1.
+        V_new[..., loc, 1 - cue] = - self.kappa[..., hints]
         self.values.append(V_new)
 
     def planning(self, b, t, offers):
@@ -155,18 +162,17 @@ class RLTempRevLearn(Discrete):
         self.offers.append(offers)
         loc1 = offers == 0
         loc2 = ~loc1
-        
-        V = zeros(self.runs, self.na)
-        V[loc1] = self.values[-1][loc1]
+        V1 = self.values[-1]
         if loc2.any():
-            V[loc2, 0] = self.values[-1][loc2, 1]
-            V[loc2, 1] = self.values[-1][loc2, 0]
-            V[loc2, -1] = self.values[-1][loc2, -1]
-        
-        self.logits.append(self.beta.reshape(-1, 1) * V)    
+            V2 = torch.stack([V1[..., 1], V1[..., 0], V1[..., -1]])
+            V = torch.where(loc1[:, None], V1, V2)
+        else:
+            V = V1
+
+        self.logits.append(self.beta[..., None] * V)
 
     def sample_responses(self, b, t):
         logits = self.logits[-1]
         cat = Categorical(logits=logits)
-       
+
         return cat.sample()
