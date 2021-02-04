@@ -65,3 +65,11 @@ pr_cd[:, 4] = 1.
 # location-outcome likelihood
 pr_all = eye(na).reshape(na, 1, na).repeat(1, na, 1)
 transitions = {'locations': pr_all}
+
+# arm type configurations in different contexts
+arm_types = torch.tensor([[0, 1, 0, 3],
+                          [0, 1, 0, 4],
+                          [2, 1, 0, 3],
+                          [2, 1, 0, 5],
+                          [2, 0, 0, 3],
+                          [2, 0, 0, 5]])
