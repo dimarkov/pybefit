@@ -64,11 +64,11 @@ pr_all = eye(na).reshape(na, 1, na).repeat(1, na, 1)
 transitions = {'locations': pr_all}
 
 # generate probability of observing different arms for each offer-choice pairs
-arm_types = torch.tensor([[3, 0, 1, 0],
-                          [4, 0, 1, 0],
+arm_types = torch.tensor([[0, 1, 0, 3],
+                          [0, 1, 0, 4],
                           [2, 1, 0, 3],
                           [2, 1, 0, 5],
-                          [0, 2, 3, 0],
-                          [0, 2, 5, 0]])
+                          [2, 0, 0, 3],
+                          [2, 0, 0, 5]])
 
 pr_arms = eye(ns)[arm_types]
