@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Script to generate a sequence of context that would be used in all simulations.
 Created on Mon Sep 23 13:33:50 2019
 
 @author: Dimitrije Markovic
@@ -51,8 +52,8 @@ for k in range(blocks):
 offers = torch.stack(offers)
 context = torch.stack(context)
 
-save('context.npy', context.numpy())
-save('offers.npy', offers.numpy())
+save('context_{}.npy'.format(blocks), context.numpy())
+save('offers_{}.npy'.format(blocks), offers.numpy())
 
 locs = (offers[:, 0, 0] == 0) + (offers[:, 0, 0] == 4) + (offers[:, 0, 0] == 2)
 segs = arange(1, blocks + 1)
