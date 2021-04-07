@@ -7,6 +7,7 @@ for different models.
 @author: Dimitrije Markovic
 """
 import argparse
+import gc
 import jax.numpy as jnp
 
 import numpyro as npyro
@@ -164,6 +165,11 @@ if __name__ == "__main__":
 
             # estimate WAIC/posterior predictive log likelihood
             res_waic[nu][nu_new] = log_pred_density(model, sample, seq_sim, agent_sim, y=responses_sim[-cutoff:])['waic']
+            del seq_sim, agent_sim, seq_sim, sample, nuts_kernel, MCMC
+            gc.collect()
 
-    # save waic scores
+    # save waic scores U=jnp.array([-.5, 1.5, 0., 0.])
     jnp.savez('waic_sim_{}_{}.npz'.format(generator, mixed), waic=res_waic)
+
+    # save waic scores U=jnp.array([1.5, 3.5, 0., 0.])
+    # jnp.savez('waic_sim_{}_{}.npz'.format(generator, mixed), waic=res_waic)
