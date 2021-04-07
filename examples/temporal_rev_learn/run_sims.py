@@ -108,9 +108,9 @@ def get_data_and_agent(outcomes, responses, generator, mixed, nu):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model comparison insilico data")
-    parser.add_argument("-n", "--subjects", nargs=1, default=1, type=int)
-    parser.add_argument("-g", "--generator", nargs=1, default='max', type=str)
-    parser.add_argument("-m", "--mixing", nargs=1, default=0, type=int)
+    parser.add_argument("-n", "--subjects", default=1, type=int)
+    parser.add_argument("-g", "--generator", default='max', type=str)
+    parser.add_argument("-m", "--mixing", default=0, type=int)
     parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
     args = parser.parse_args()
 
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     n = args.subjects
     generator = args.generator
     mixed = args.mixing
-
+    print(n, generator, mixed)
     # load experiment and generate observations
     data = io.loadmat('main/states_and_rewards.mat')
     Sirr = data['irregular']['S'][0, 0][:, 0] - 1
