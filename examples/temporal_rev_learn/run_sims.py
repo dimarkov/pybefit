@@ -153,12 +153,13 @@ if __name__ == "__main__":
         outcomes_sim = sequences['outcomes']
         res_waic[nu] = {}
         for nu_new in range(1, 11):
+            print(nu, nu_new)
             rng_key, _rng_key = random.split(rng_key)
             seq_sim, agent_sim = get_data_and_agent(outcomes_sim, responses_sim, generator, mixed, nu_new)
 
             # fit simulated data
             nuts_kernel = NUTS(model)
-            mcmc = MCMC(nuts_kernel, num_warmup=1000, num_samples=1000)
+            mcmc = MCMC(nuts_kernel, num_warmup=1000, num_samples=1000, progress_bar=False)
             seq_sim = (seq_sim['beliefs'][0][-cutoff:], seq_sim['beliefs'][1][-cutoff:])
             mcmc.run(_rng_key, seq_sim, agent_sim, y=responses_sim[-cutoff:])
             sample = mcmc.get_samples()
