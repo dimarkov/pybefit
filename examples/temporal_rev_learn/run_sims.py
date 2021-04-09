@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import numpyro as npyro
 import numpyro.distributions as dist
 
-from agents import Agent
+from agents import Agent, logits
 from jax import lax, random
 from numpyro.infer import MCMC, NUTS
 from numpyro.infer import log_likelihood
@@ -58,7 +58,7 @@ def estimate_beliefs(outcomes, choices, nu_max=10, nu_min=0):
     
     return sequence, agent
 
-def model(beliefs, agent, y=None, mask=True):
+def model(beliefs, y=None, mask=True):
     # generative model
     T, N = beliefs[0].shape[:2]
     with npyro.plate('N', N):
@@ -71,17 +71,15 @@ def model(beliefs, agent, y=None, mask=True):
                        jnp.zeros_like(lams[..., 1])], -1)
         U -= logsumexp(U)
         with npyro.plate('T', T):
-            logits = agent.logits(beliefs, 
-                                  jnp.expand_dims(gamma, -1), 
-                                  jnp.expand_dims(U, -2))
-            obs = npyro.sample('obs', dist.CategoricalLogits(logits).mask(mask), obs=y)
+            logs = logits(beliefs, jnp.expand_dims(gamma, -1), jnp.expand_dims(U, -2))
+            obs = npyro.sample('obs', dist.CategoricalLogits(logs).mask(mask), obs=y)
 
 def log_pred_density(model, samples, *args, **kwargs):
     # waic score of posterior samples
     log_lk = log_likelihood(model, samples, *args, **kwargs)['obs'].sum(-2)
     n = log_lk.shape[0]
     _lpd = logsumexp(log_lk, 0) - jnp.log(n)
-    p_waic = n * log_lk.var(0)/(n - 1)
+    p_waic = n * log_lk.var(0) / (n - 1)
     return {'lpd': _lpd, 'waic': _lpd - p_waic}
 
 def get_data_and_agent(outcomes, responses, generator, mixed, nu):
@@ -105,7 +103,7 @@ def get_data_and_agent(outcomes, responses, generator, mixed, nu):
                                               responses, 
                                               nu_max=10, 
                                               nu_min=nu-1)
-    return seq_sim, agent_sim
+    return seq_sim
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model comparison insilico data")
@@ -155,18 +153,18 @@ if __name__ == "__main__":
         for nu_new in range(1, 11):
             print(nu, nu_new)
             rng_key, _rng_key = random.split(rng_key)
-            seq_sim, agent_sim = get_data_and_agent(outcomes_sim, responses_sim, generator, mixed, nu_new)
+            seq_sim = get_data_and_agent(outcomes_sim, responses_sim, generator, mixed, nu_new)
 
             # fit simulated data
-            nuts_kernel = NUTS(model)
-            mcmc = MCMC(nuts_kernel, num_warmup=1000, num_samples=1000, progress_bar=False)
             seq_sim = (seq_sim['beliefs'][0][-cutoff:], seq_sim['beliefs'][1][-cutoff:])
-            mcmc.run(_rng_key, seq_sim, agent_sim, y=responses_sim[-cutoff:])
+            nuts_kernel = NUTS(model)
+            mcmc = MCMC(nuts_kernel, num_warmup=1000, num_samples=1000, progress_bar=True)
+            mcmc.run(_rng_key, seq_sim, y=responses_sim[-cutoff:])
             sample = mcmc.get_samples()
 
             # estimate WAIC/posterior predictive log likelihood
-            res_waic[nu][nu_new] = log_pred_density(model, sample, seq_sim, agent_sim, y=responses_sim[-cutoff:])['waic']
-            del seq_sim, agent_sim, sample, nuts_kernel, mcmc
+            res_waic[nu][nu_new] = log_pred_density(model, sample, seq_sim, y=responses_sim[-cutoff:])['waic']
+            del seq_sim, sample
             gc.collect()
 
     # save waic scores U=jnp.array([-.5, 1.5, 0., 0.])

@@ -11,7 +11,7 @@ import jax.numpy as jnp
 from jax.scipy.special import digamma
 from jax import nn, random, lax, vmap, ops
 
-from scipy.special import binom
+from jax.scipy.special import gammaln
 from opt_einsum import contract
 
 vdiag = vmap(lambda v: jnp.diag(v, k=0))
@@ -23,6 +23,31 @@ def einsum(equation, *args):
 def log(x, minimum=-1e10):
     return jnp.where(x > 0, jnp.log(x), minimum) 
 
+def binom(n, k):
+    return jnp.exp(gammaln(n + 1) - gammaln(k + 1) - gammaln(n - k + 1))
+
+def par_efe(p_c, params, U):
+    # expected free energy
+    p_aco = params/params.sum(-1, keepdims=True)
+    q_ao = einsum('...aco,...c->...ao', p_aco, p_c)
+
+    KL_a =  - jnp.sum(q_ao * U, -1) + jnp.sum(q_ao * log(q_ao), -1)
+
+    H_ac = - (p_aco * digamma(params)).sum(-1) + digamma(params.sum(-1) + 1)
+    H_a = einsum('...c,...ac->...a', p_c, H_ac)
+
+    return KL_a + H_a
+    
+def logits(beliefs, gamma, U):
+    # log likelihood of beliefs
+    p_cfm, params = beliefs
+
+    p_c = einsum('...cfm->...c', p_cfm)
+
+    # expected surprisal based action selection
+    S_a = par_efe(p_c, params, U)
+
+    return - gamma * ( S_a - S_a.min(-1, keepdims=True))
 
 class Agent(object):
     def __init__(self, N, nu_max=1, nu_min=0):
@@ -85,26 +110,8 @@ class Agent(object):
         probs = einsum('c,fm->cfm', prior_c, prior_fm)[None].repeat(self.N, 0)
         self.prior = (probs, pars)
         
-    def __par_efe(self, p_c, params, U):
-        p_aco = params/params.sum(-1, keepdims=True)
-        q_ao = einsum('...aco,...c->...ao', p_aco, p_c)
-    
-        KL_a =  - jnp.sum(q_ao * U, -1) + jnp.sum(q_ao * log(q_ao), -1)
-    
-        H_ac = - (p_aco * digamma(params)).sum(-1) + digamma(params.sum(-1) + 1)
-        H_a = einsum('...c,...ac->...a', p_c, H_ac)
-    
-        return KL_a + H_a
-    
     def logits(self, beliefs, gamma, U):
-        p_cfm, params = beliefs
-
-        # expected surprisal based action selection
-        p_c = einsum('...cfm->...c', p_cfm)
-
-        S_a = self.__par_efe(p_c, params, U)
-
-        return - gamma * ( S_a - S_a.min(-1, keepdims=True))
+        return logits(beliefs, gamma, U)
 
     def action_selection(self, rng_key, beliefs, gamma=1e3, U=jnp.array([-1., 1., 0., 0.])):
         # sample choices
