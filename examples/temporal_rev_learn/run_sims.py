@@ -82,7 +82,7 @@ def log_pred_density(model, samples, *args, **kwargs):
     p_waic = n * log_lk.var(0) / (n - 1)
     return {'lpd': _lpd, 'waic': _lpd - p_waic}
 
-def get_data_and_agent(outcomes, responses, generator, mixed, nu):
+def get_data_and_agent(outcomes, responses, generator, mixed, nu, cutoff):
     if generator == 'max' and mixed:
         seq_sim, agent_sim = estimate_beliefs(outcomes, 
                                               responses, 
@@ -103,11 +103,13 @@ def get_data_and_agent(outcomes, responses, generator, mixed, nu):
                                               responses, 
                                               nu_max=10, 
                                               nu_min=nu-1)
-    return seq_sim
+    
+    return (seq_sim['beliefs'][0][-cutoff:], seq_sim['beliefs'][1][-cutoff:])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model comparison insilico data")
     parser.add_argument("-n", "--subjects", default=1, type=int)
+    parser.add_argument("-nu", "--precision", default=1, type=int)
     parser.add_argument("-g", "--generator", default='max', type=str)
     parser.add_argument("-m", "--mixing", default=0, type=int)
     parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
@@ -117,6 +119,7 @@ if __name__ == "__main__":
     
     rng_key = random.PRNGKey(23478875)
     cutoff = 800
+    nu_inf = args.precision
     n = args.subjects
     generator = args.generator
     mixed = args.mixing
@@ -140,35 +143,33 @@ if __name__ == "__main__":
     def process(t, responses):
         return outcomes[t, subs, responses]
 
-    res_waic = {}
-    for nu in range(1, 11):
+    res_waic = {nu_inf: {}}
+    nuts_kernel = NUTS(model)
+    mcmc = MCMC(nuts_kernel, num_warmup=1000, num_samples=1000, progress_bar=False)
+    for nu_true in range(1, 11):
+        print(nu_true, nu_inf)
         if generator=='max':
-            agent = Agent(N, nu_max=nu)
+            agent = Agent(N, nu_max=nu_true)
         else:
-            agent = Agent(N, nu_max=10, nu_min=nu-1)
+            agent = Agent(N, nu_max=10, nu_min=nu_true-1)
+
         sequences = simulator(process, agent, U=jnp.array([-.5, 1.5, 0., 0.]))
         responses_sim = sequences['choices']
         outcomes_sim = sequences['outcomes']
-        res_waic[nu] = {}
-        for nu_new in range(1, 11):
-            print(nu, nu_new)
-            rng_key, _rng_key = random.split(rng_key)
-            seq_sim = get_data_and_agent(outcomes_sim, responses_sim, generator, mixed, nu_new)
+        rng_key, _rng_key = random.split(rng_key)
+        seq_sim = get_data_and_agent(outcomes_sim, responses_sim, generator, mixed, nu_inf, cutoff)
 
-            # fit simulated data
-            seq_sim = (seq_sim['beliefs'][0][-cutoff:], seq_sim['beliefs'][1][-cutoff:])
-            nuts_kernel = NUTS(model)
-            mcmc = MCMC(nuts_kernel, num_warmup=1000, num_samples=1000, progress_bar=True)
-            mcmc.run(_rng_key, seq_sim, y=responses_sim[-cutoff:])
-            sample = mcmc.get_samples()
+        # fit simulated data
+        mcmc.run(_rng_key, seq_sim, y=responses_sim[-cutoff:])
+        sample = mcmc.get_samples()
 
-            # estimate WAIC/posterior predictive log likelihood
-            res_waic[nu][nu_new] = log_pred_density(model, sample, seq_sim, y=responses_sim[-cutoff:])['waic']
-            del seq_sim, sample
-            gc.collect()
+        # estimate WAIC/posterior predictive log likelihood
+        res_waic[nu_inf][nu_true] = log_pred_density(model, sample, seq_sim, y=responses_sim[-cutoff:])['waic']
+        del seq_sim, sample
+        gc.collect()
 
     # save waic scores U=jnp.array([-.5, 1.5, 0., 0.])
-    jnp.savez('waic_sim_{}_{}.npz'.format(generator, mixed), waic=res_waic)
+    jnp.savez('waic_sim_{}_{}_nu_{}.npz'.format(generator, mixed, nu_inf), waic=res_waic)
 
     # save waic scores U=jnp.array([1.5, 3.5, 0., 0.])
     # jnp.savez('waic_sim_{}_{}.npz'.format(generator, mixed), waic=res_waic)
