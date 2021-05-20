@@ -41,14 +41,15 @@ def simulator(process, agent, seed=0, **model_kw):
     
     return sequence
 
-def estimate_beliefs(outcomes, choices, nu_max=10, nu_min=0):
+def estimate_beliefs(outcomes, choices, mask=1, nu_max=10, nu_min=0):
     # belief estimator from fixed responses and outcomes
     T, N = choices.shape
     assert outcomes.shape == (T, N)
+    mask = jnp.broadcast_to(mask, (T, N))
     agent = Agent(N, nu_max=nu_max, nu_min=nu_min)
     def sim_fn(carry, t):
         prior = carry
-        posterior = agent.learning(outcomes[t], choices[t], prior)
+        posterior = agent.learning(outcomes[t], choices[t], prior, mask=mask[t])
                 
         return posterior, {'beliefs': prior}
     
@@ -82,7 +83,7 @@ def log_pred_density(model, samples, *args, **kwargs):
     p_waic = n * log_lk.var(0) / (n - 1)
     return {'lpd': _lpd, 'waic': _lpd - p_waic}
 
-def get_data_and_agent(outcomes, responses, generator, mixed, nu, cutoff):
+def get_belief_sequence(outcomes, responses, generator, mixed, nu, cutoff):
     if generator == 'max' and mixed:
         seq_sim, agent_sim = estimate_beliefs(outcomes, 
                                               responses, 
@@ -157,7 +158,7 @@ if __name__ == "__main__":
         responses_sim = sequences['choices']
         outcomes_sim = sequences['outcomes']
         rng_key, _rng_key = random.split(rng_key)
-        seq_sim = get_data_and_agent(outcomes_sim, responses_sim, generator, mixed, nu_inf, cutoff)
+        seq_sim = get_belief_sequence(outcomes_sim, responses_sim, generator, mixed, nu_inf, cutoff)
 
         # fit simulated data
         mcmc.run(_rng_key, seq_sim, y=responses_sim[-cutoff:])

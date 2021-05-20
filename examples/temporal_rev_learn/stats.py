@@ -45,7 +45,7 @@ def trials_until_correct(correct, state, τ=2):
     count = np.zeros(state_switch.shape[0])  # counter trials since the last switch
     allowed = np.ones(state_switch.shape[0])
     cum_corr = np.zeros(correct.shape[:-1])  # counter for corect responses in a sequence
-    trials_until_correct = np.zeros(correct.shape)
+    tuc = np.zeros(correct.shape)  # trials until correct
     for t in range(state_switch.shape[-1]):
         # increase counter if state did not switch, otherwise reset to 1
         count = (count + 1) * (1 - state_switch[..., t]) + state_switch[..., t]
@@ -61,10 +61,18 @@ def trials_until_correct(correct, state, τ=2):
         valid = (count >= τ)
         # mark count for valid dimensions (participants) which satisfy the condition
         # all the other elements are set to NaN
-        trials_until_correct[..., t] = np.where(valid * at_threshold, count, np.nan)
+        tuc[..., t] = np.where(valid * at_threshold, count, np.nan)
 
-    # retrun mean trials until correct across the experiment for each participant and sample
-    return trials_until_correct
+    cum_tuc = np.nancumsum(tuc, axis=-1)
+    for i, s in enumerate(state_switch):
+        tau = np.diff(np.insert(np.nonzero(s), 0, 0))  # between reversal duration
+        d_tuc = np.diff(np.insert(cum_tuc[i, s.astype(bool)], 0, 0))  # between reversal tuc
+        # if change in tuc is zero add tau as maximal tuc
+        loc = d_tuc == 0  # where tuc did not change
+        trials_before_switch = np.arange(tuc.shape[-1])[s.astype(bool)] - 1
+        tuc[i, trials_before_switch[loc]] = tau[loc]
+
+    return tuc
 
 
 def trials_until_explore(explore, state):
