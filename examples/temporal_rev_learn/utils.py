@@ -23,13 +23,13 @@ def simulator(process, agent, seed=0, **model_kw):
         
         outcomes = process(t, choices)
         
-        posterior = agent.learning(outcomes, choices, prior)
+        posterior = agent.learning(t, outcomes, choices, prior)
                 
         return (rng_key, posterior), {'outcomes': outcomes, 
                                       'choices': choices}
     
     rng_key = random.PRNGKey(seed)
-    _, sequence = lax.scan(sim_fn, (rng_key, agent.prior), jnp.arange(len(outcomes)))
+    _, sequence = lax.scan(sim_fn, (rng_key, agent.prior), jnp.arange(agent.T))
     sequence['outcomes'].block_until_ready()
     
     return sequence
@@ -38,11 +38,10 @@ def estimate_beliefs(outcomes, choices, mask=1, nu_max=10, nu_min=0):
     # belief estimator from fixed responses and outcomes
     T, N = choices.shape
     assert outcomes.shape == (T, N)
-    mask = jnp.broadcast_to(mask, (T, N))
-    agent = Agent(N, nu_max=nu_max, nu_min=nu_min)
+    agent = Agent(T, N, nu_max=nu_max, nu_min=nu_min, mask=mask)
     def sim_fn(carry, t):
         prior = carry
-        posterior = agent.learning(outcomes[t], choices[t], prior, mask=mask[t])
+        posterior = agent.learning(t, outcomes[t], choices[t], prior)
                 
         return posterior, {'beliefs': prior}
     
@@ -63,18 +62,18 @@ def generative_model(beliefs, y=None, mask=True):
                        lams[..., 1], 
                        jnp.zeros_like(lams[..., 1]), 
                        jnp.zeros_like(lams[..., 1])], -1)
-        U -= logsumexp(U)
+
         with npyro.plate('T', T):
             logs = logits(beliefs, jnp.expand_dims(gamma, -1), jnp.expand_dims(U, -2))
-            obs = npyro.sample('obs', dist.CategoricalLogits(logs).mask(mask), obs=y)
+            npyro.sample('obs', dist.CategoricalLogits(logs).mask(mask), obs=y)
 
 def log_pred_density(model, samples, *args, **kwargs):
     # waic score of posterior samples
     log_lk = log_likelihood(model, samples, *args, **kwargs)['obs'].sum(-2)
-    n = log_lk.shape[0]
-    _lpd = logsumexp(log_lk, 0) - jnp.log(n)
-    p_waic = n * log_lk.var(0) / (n - 1)
-    return {'lpd': _lpd, 'waic': _lpd - p_waic}
+    S = log_lk.shape[0]
+    lppd = logsumexp(log_lk, 0) - jnp.log(S)
+    p_waic = jnp.var(log_lk, axis=0, ddof=1)
+    return {'lpd': lppd, 'waic': lppd - p_waic}
 
 
 from numpyro.distributions.distribution import Distribution
