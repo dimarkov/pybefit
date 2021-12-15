@@ -13,7 +13,7 @@ def load_data():
     df_res['experiment'] = 'main'
     _df_res = pd.read_csv('pilot/responses.csv').set_index('subject')
     _df_res['experiment'] = 'pilot'
-    df_res = df_res.append(_df_res, ignore_index=True).sort_values(by=['condition', 'experiment'], ascending=False)
+    df_res = df_res.append(_df_res, ignore_index=True) #.sort_values(by=['condition', 'experiment'], ascending=False)
 
     responses = df_res.values[:, :-2].T.astype(float)
 
@@ -24,19 +24,33 @@ def load_data():
     _df_out = pd.read_csv('pilot/outcomes.csv').set_index('subject')
     _df_out['experiment'] = 'pilot'
     _df_out['condition'] = _df_res['condition']
-    df_out = df_out.append(_df_out, ignore_index=True).sort_values(by=['condition', 'experiment'], ascending=False)
+    df_out = df_out.append(_df_out, ignore_index=True) #.sort_values(by=['condition', 'experiment'], ascending=False)
     outcomes = df_out.values[:, :-2].T.astype(float)
+
+    df_cor = pd.read_csv('main/correct_responses.csv').set_index('subject')
+    df_cor['experiment'] = 'main'
+    df_cor['condition'] = df_res['condition']
+
+    _df_cor = pd.read_csv('pilot/correct_responses.csv').set_index('subject')
+    _df_cor['experiment'] = 'pilot'
+    _df_cor['condition'] = df_res['condition']
+    df_cor = df_cor.append(_df_cor, ignore_index=True) #.sort_values(by=['condition', 'experiment'], ascending=False)
+    corrects = df_cor.values[:, :-2].T.astype(float)
 
     ns_reg = (df_res['condition'] == 'regular').sum()   # number of subjects in the regular reversals group
     ns_irr = (df_res['condition'] == 'irregular').sum()  # number of subjects in the irregular reversals group
 
     nsub = responses.shape[-1]
 
+    assert np.all((np.isnan(responses) + (responses == 2)) == np.isnan(corrects))
+
+    corrects_all = np.where(np.isnan(responses), 0., corrects)
+
     mask_all = ~np.isnan(responses)
     responses_all = np.nan_to_num(responses)
     outcomes_all = np.nan_to_num(outcomes)
     
-    return outcomes_all, responses_all, mask_all, (nsub, ns_reg, ns_irr)
+    return outcomes_all, responses_all, mask_all, (nsub, ns_reg, ns_irr), corrects_all, df_res.loc[:,'condition':'experiment']
 
 def trials_until_correct(correct, state, τ=2):
     # mark trial on which state switch occured

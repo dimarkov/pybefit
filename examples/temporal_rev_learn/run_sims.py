@@ -6,25 +6,25 @@ model inversion based on simulated responses. Saves waic scores
 for different models.
 @author: Dimitrije Markovic
 """
+# set environment for better memory menagment
+import os 
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
 import argparse
 import jax.numpy as jnp
 
 import numpyro as npyro
-import numpyro.distributions as dist
 
 from agents import Agent
 from utils import estimate_beliefs, simulator, log_pred_density
 from utils import generative_model as model
-from jax import random
+from jax import random, devices, device_put
 from numpyro.infer import MCMC, NUTS
 from scipy import io
 
-import os 
-
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-
-def get_belief_sequence(outcomes, responses, generator, m_inf, cutoff):
+def get_belief_sequence(outcomes, responses, m_inf, cutoff, device):
+    # here we map model number m_inf to the parameter value pairs nu_max, nu_min
     if m_inf < 11:
         seq_sim, _ = estimate_beliefs(outcomes, 
                                       responses, 
@@ -36,7 +36,10 @@ def get_belief_sequence(outcomes, responses, generator, m_inf, cutoff):
                                       nu_max=10, 
                                       nu_min=m_inf-10)
     
-    return (seq_sim['beliefs'][0][-cutoff:], seq_sim['beliefs'][1][-cutoff:])
+    return ( 
+                device_put(seq_sim['beliefs'][0][-cutoff:], devices(device)[0]), 
+                device_put(seq_sim['beliefs'][1][-cutoff:], devices(device)[0]) 
+            )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model comparison insilico data")
@@ -65,15 +68,15 @@ if __name__ == "__main__":
     outcomes2 = jnp.concatenate([Sreg[:, None].repeat(n, -1) + 2, 
                                  Sirr[:, None].repeat(n, -1) + 2], -1)[..., None]
 
-    outcomes = jnp.concatenate([outcomes1, outcomes2], -1)
+    outcomes = device_put(jnp.concatenate([outcomes1, outcomes2], -1), devices('cpu')[0])
 
     N = 2 * n
     T = len(outcomes)
-    subs = jnp.array(range(N))
+    subs = device_put(jnp.array(range(N)), devices('cpu')[0])
     process = lambda t, responses: outcomes[t, subs, responses]
 
     # prior preferences 
-    U = jnp.array([-.5, 1.5, 0., 0.])
+    U = jnp.array([0., 1., 0., 0.])
 
     res_waic = {m_inf: {}}
     nuts_kernel = NUTS(model)
@@ -85,19 +88,24 @@ if __name__ == "__main__":
         else:
             agent = Agent(T, N, nu_max=10, nu_min=m_true-10, U=U)
 
-        sequences = simulator(process, agent, gamma=10.)
+        sequences = simulator(process, agent, gamma=10., seed=m_true)
         responses_sim = sequences['choices']
         outcomes_sim = sequences['outcomes']
-        rng_key, _rng_key = random.split(rng_key)
-        seq_sim = get_belief_sequence(outcomes_sim, responses_sim, m_inf, cutoff)
+        seq_sim = get_belief_sequence(outcomes_sim, responses_sim, m_inf, cutoff, args.device)
 
         # fit simulated data
-        mcmc.run(_rng_key, seq_sim, y=responses_sim[-cutoff:])
+        responses = device_put(responses_sim[-cutoff:], devices(args.device)[0])
+        rng_key, _rng_key = random.split(rng_key)
+        mcmc.run(_rng_key, seq_sim, y=responses)
         sample = mcmc.get_samples()
 
         # estimate WAIC/posterior predictive log likelihood
-        res_waic[m_inf][m_true] = log_pred_density(model, sample, seq_sim, y=responses_sim[-cutoff:])['waic']
-        del seq_sim, sample
+        res_waic[m_inf][m_true] = device_put(
+            log_pred_density(model, sample, seq_sim, y=responses)['waic'], 
+            devices('cpu')[0]
+        )
+
+        del seq_sim, sample, agent
 
     # save waic scores
     jnp.savez('waic_sim_minf_{}.npz'.format(m_inf), waic=res_waic)
