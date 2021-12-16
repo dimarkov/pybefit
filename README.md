@@ -1,7 +1,7 @@
 # Probabilistic inference for models of behaviour
 =================================================
 
-PyBefit is a Python library for Bayesian analysis of behavioral data. It is based on [Pyro/Numpyro](pyro.ai) a probabilistic programing language and [PyTorch](https://pytorch.org/) and [Jax](https://github.com/google/jax) machine learning libraries.
+PyBefit is a Python library for Bayesian analysis of behavioral data. It is based on [Pyro/Numpyro](pyro.ai) a probabilistic programing language, [PyTorch](https://pytorch.org/), and [Jax](https://github.com/google/jax) machine learning libraries.
 
 Requirements
 ------------
@@ -24,13 +24,19 @@ poetry install
 poetry shell
 ```
 
-If cuda support is present and required for your work simply run the following commands
+If cuda support is present and required for your work, simply run the following commands
 ```sh
+poetry shell pip install pip --upgrade
 poetry shell poe force-cuda11-torch
 poetry shell poe force-cuda11-jax
 ```
 This will upgrade pytorch and jax to the version with cuda 
-support. 
+support.
+
+If you prefer different environment managers you can install pybefit using the provided 'setup.py' with 
+```sh
+python setup.py develop
+```
 
 Examples
 --------

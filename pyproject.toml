@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "pybefit"
+name = "PyBefit"
 version = "0.1.0"
 description = "PyBefit is a Python library for Bayesian analysis of behavioral data."
 authors = ["Dimitrije Markovic <dimitrije.markovic@tu-dresden.de>"]
