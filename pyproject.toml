@@ -14,6 +14,7 @@ seaborn = "^0.11.2"
 pyro-ppl = "^1.8.0"
 numpyro = "^0.8.0"
 jupyter = {extras = ["black"], version = "^1.0.0"}
+nb-black = "^1.0.7"
 
 [tool.poe.tasks]
 ## PyTorch with CUDA 11.3

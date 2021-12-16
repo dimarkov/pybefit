@@ -13,6 +13,7 @@ package_data = \
 install_requires = \
 ['jupyter[black]>=1.0.0,<2.0.0',
  'matplotlib>=3.5.1,<4.0.0',
+ 'nb-black>=1.0.7,<2.0.0',
  'numpy>=1.21.4,<2.0.0',
  'numpyro>=0.8.0,<0.9.0',
  'pandas>=1.3.5,<2.0.0',
