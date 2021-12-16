@@ -18,18 +18,19 @@ seaborn
 
 Installation
 ------------
-
-The easiest way to install required libraries is using [conda](https://conda.io/miniconda.html)
-and pip package managers.
-
-First setup an environment using anaconda prompt (or just terminal in linux):
-
+The easiest way to install required libraries and the PyBefit package is using [poetry](https://conda.io/miniconda.html) package manager. Inside the project root directory run 
 ```sh
-conda create -n befit python=3 numpy pandas matplotlib seaborn
-conda activate befit
-conda install pytorch -c pytorch
-pip install pyro-ppl
+poetry install
+poetry shell
 ```
+
+If cuda support is present and required for your work simply run the following commands
+```sh
+poetry shell poe force-cuda11-torch
+poetry shell poe force-cuda11-jax
+```
+This will upgrade pytorch and jax to the version with cuda 
+support. 
 
 Examples
 --------
