@@ -3,7 +3,8 @@
 """
 Created on Wed Jun  5 19:14:01 2019
 
-This module contains active inference agents for various experimental tasks. 
+This module contains RL agents using backward infuction to 
+estimate optimal policy in various experimental tasks. 
 
 @author: Dimitrije Markovic
 """
@@ -25,7 +26,7 @@ __all__ = [
 ]
 
 def ntn(x):
-    return torch.from_numpy(nan_to_num(x))
+    return torch.nan_to_num(x)
 
 def mli(x, L):
     return ravel_multi_index(x, (L,)*2)

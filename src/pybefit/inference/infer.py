@@ -2,6 +2,7 @@
 different modules that govern agent's behavior.
 """
 
+from pyro.infer.reparam.transform import TransformReparam
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
@@ -9,8 +10,9 @@ import numpy as np
 import torch
 from torch import zeros, ones, tensor
 
-from pyro import clear_param_store, get_param_store
+from pyro import clear_param_store, get_param_store, poutine
 from pyro.infer import SVI, Trace_ELBO
+from pyro.infer import autoguide
 from pyro.infer.enum import get_importance_trace
 from pyro.infer.predictive import Predictive
 from pyro.optim import Adam
@@ -56,7 +58,7 @@ class Inferrer(object):
         """
         raise NotImplementedError
 
-    def guide(self):
+    def custom_guide(self):
         """Approximate posterior over model parameters.
         """
         raise NotImplementedError
@@ -70,8 +72,10 @@ class Inferrer(object):
 
         clear_param_store()
 
-        svi = SVI(model=self.model,
-                  guide=self.guide,
+        model = self.model
+        guide = self.guide        
+        svi = SVI(model=model,
+                  guide=guide,
                   optim=Adam(optim_kwargs),
                   loss=Trace_ELBO(num_particles=num_particles,
                                   vectorize_particles=True))
@@ -80,7 +84,7 @@ class Inferrer(object):
         pbar = tqdm(range(iter_steps), position=0)
         for step in pbar:
             loss.append(svi.step())
-            pbar.set_description("Mean ELBO %6.2f" % tensor(loss[-20:]).mean())
+            pbar.set_description("Mean ELBO %6.2f" % np.mean(loss[-20:]))
             if np.isnan(loss[-1]):
                 break
 
@@ -93,16 +97,13 @@ class Inferrer(object):
         npar = self.npar
         assert npar == len(labels)
 
-        predict = Predictive(self.model, guide=self.guide, num_samples=num_samples, parallel=True)
-        samples = predict()
-
         sites = ['tau', 'mu', 'locs']
         predict = Predictive(self.model, guide=self.guide, num_samples=num_samples, return_sites=sites, parallel=True)
         samples = predict()
 
-        subject_label = torch.arange(1, nsub+1).repeat(num_samples, 1).reshape(-1)
+        subject_id = torch.arange(1, nsub+1).repeat(num_samples, 1).reshape(-1)
         trans_pars_df = pd.DataFrame(data=samples['locs'].detach().reshape(-1, npar).numpy(), columns=labels)
-        trans_pars_df['subject'] = subject_label.numpy()
+        trans_pars_df['subject'] = subject_id.numpy()
 
         locs = samples['locs'].detach()
         if self.fixed_values:
@@ -117,7 +118,7 @@ class Inferrer(object):
         for lab in labels:
             pars.append(getattr(self.agent, lab).reshape(-1).numpy())
         pars_df = pd.DataFrame(data=np.stack(pars, -1), columns=labels)
-        pars_df['subject'] = subject_label.numpy()
+        pars_df['subject'] = subject_id.numpy()
 
         mu = np.take(samples['mu'].detach().numpy(), 0, axis=-2)
         tau = np.take(samples['tau'].detach().numpy(), 0, axis=-2)
@@ -190,24 +191,20 @@ class Inferrer(object):
 
         return df_percentiles.melt(id_vars=['subjects', 'variables'], var_name='parameter')
 
-    def get_log_evidence_per_subject(self, num_particles=100, max_plate_nesting=1):
+    def get_log_evidence_per_subject(self, *args, num_particles=100, max_plate_nesting=1, **kwargs):
         """Return subject specific log model evidence"""
 
         model = self.model
         guide = self.guide
-        notnans = self.notnans
 
         elbo = zeros(self.runs)
         for i in range(num_particles):
-            model_trace, guide_trace = get_importance_trace('flat', max_plate_nesting, model, guide)
-            obs_log_probs = zeros(notnans.shape)
+            model_trace, guide_trace = get_importance_trace('flat', max_plate_nesting, model, guide, args, kwargs)
             for site in model_trace.nodes.values():
                 if site['name'].startswith('obs'):
-                    obs_log_probs[notnans] = site['log_prob'].detach()
+                    elbo += site['log_prob'].detach()
                 elif site['name'] == 'locs':
                     elbo += site['log_prob'].detach()
-
-            elbo += torch.einsum('ijk->k', obs_log_probs)
 
             for site in guide_trace.nodes.values():
                 if site['name'] == 'locs':

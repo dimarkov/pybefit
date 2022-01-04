@@ -37,18 +37,16 @@ class HGFSocInf(Discrete):
 
         super(HGFSocInf, self).__init__(runs, blocks, trials, na, ns, no)
 
-    def set_parameters(self, x=None):
+    def set_parameters(self, x=None, **kwargs):
 
         if x is not None:
-            self.mu0 = torch.zeros_like(x[..., :2])
-            self.mu0[..., 0] = 0.
-            self.mu0[..., 1] = -(x[..., 0]+5.).relu() - 2.
-            self.pi0 = torch.zeros_like(x[..., 2:4])
-            self.pi0[..., 0] = 2.
-            self.pi0[..., 1] = 2.
+            self.mu0_1 = torch.zeros_like(x[..., 0])
+            self.mu0_2 = - softplus(x[..., 0] + 5.) - 2.
+            self.mu0 = torch.stack([self.mu0_1, self.mu0_2], -1)
+            self.pi0 = torch.ones_like(x[..., 2:4]) * 2.
             self.eta = (x[..., 1]-5).sigmoid()
             self.zeta = x[..., 2].sigmoid()
-            self.beta = x[..., 3].exp()
+            self.beta = softplus(x[..., 3])
             self.bias = x[..., 4]
         else:
             self.mu0 = zeros(self.runs, 2)
@@ -81,23 +79,23 @@ class HGFSocInf(Discrete):
 
         # 1st level
         # Prediction
-        muhat = mu_pre[:, 0].sigmoid()
+        muhat = mu_pre[..., 0].sigmoid()
 
         #Update
 
         # 2nd level
         # Precision of prediction
 
-        w1 = torch.exp(self.kappa*mu_pre[:, -1])
+        w1 = torch.exp(self.kappa*mu_pre[..., -1])
 
         # Updates
-        pihat1 = pi_pre[:, 0]/(1 + pi_pre[:, 0]*w1)
+        pihat1 = pi_pre[..., 0]/(1 + pi_pre[..., 0] * w1)
 
-        pi1 = pihat1 + mask * muhat * (1-muhat)
+        pi1 = pihat1 + mask * muhat * (1 - muhat)
 
         o = response_outcomes[-1][:, -2]  # observation
         wda = mask * ( (o + 1)/2 - muhat) / pi1
-        mu.append(mu_pre[:, 0] + wda)
+        mu.append(mu_pre[..., 0] + wda)
         pi.append(pi1)
 
 
@@ -106,39 +104,25 @@ class HGFSocInf(Discrete):
 
         # 3rd level
         # Precision of prediction
-        pihat2 = pi_pre[:, 1] / (1. + pi_pre[:, 1] * self.eta)
+        pihat2 = pi_pre[..., 1] / (1. + pi_pre[..., 1] * self.eta)
 
         # Weighting factor
         w2 = w1 * pihat1 * mask
 
         # Updates
-        pi2 = pihat2 + self.kappa**2 * w2 * (w2 + (2 * w2 - 1) * da1) / 2
+        pi2 = torch.clip(pihat2 + self.kappa**2 * w2 * (w2 + (2 * w2 - 1) * da1) / 2, min=1e-2)
 
-        mu.append(mu_pre[:, 1] + self.kappa * w2 * da1 / (2 * pi2))
+        mu.append(mu_pre[..., 1] + self.kappa * w2 * da1 / (2 * pi2))
         pi.append(pi2)
 
-        invalid = (pi[-1] <= 0.) | torch.isnan(mu[0]) | torch.isnan(mu[1])
-
-        mu = torch.stack(mu, dim=-1)
-        pi = torch.stack(pi, dim=-1)
-
-        if invalid.any():
-            # negative precision is impossible, hence parameter values are unreliable.
-            # Normaly one can rise an error but we can also just fix the values to
-            # zero and prevent the update at all levels. One would expect that
-            	# fixed values provide bad fit to the data.
-            warnings.warn('Encountered negative precision on the 3rd level')
-            pi[invalid] = 0.
-            mu[invalid] = 0.
-
-        self.mu.append(mu)
-        self.pi.append(pi)
+        self.mu.append(torch.stack(mu, dim=-1))
+        self.pi.append(torch.stack(pi, dim=-1))
 
     def planning(self, b, t, offers):
 
-        sig = (self.kappa*self.mu[-1][:, 1]).exp() + self.pi[-1][:, 0]
+        sig = (self.kappa*self.mu[-1][..., 1]).exp() + self.pi[-1][..., 0]
         gamma = torch.sqrt(1 + 3.14159*sig/8)
-        b_soc = (self.mu[-1][:, 0]/gamma).sigmoid()
+        b_soc = (self.mu[-1][..., 0]/gamma).sigmoid()
 
         b_vis = offers
 
@@ -166,13 +150,13 @@ class SGFSocInf(Discrete):
 
         super(SGFSocInf, self).__init__(runs, blocks, trials, na, ns, no)
 
-    def set_parameters(self, x=None):
+    def set_parameters(self, x=None, **kwargs):
 
         if x is not None:
-            self.rho1 = x[..., 0].exp()
+            self.rho1 = softplus(x[..., 0])
             self.h = (x[..., 1]-3).sigmoid()
             self.zeta = x[..., 2].sigmoid()
-            self.beta = x[..., 3].exp()
+            self.beta = softplus(x[..., 3])
             self.bias = x[..., 4]
         else:
             self.rho1 = .1
@@ -222,8 +206,8 @@ class SGFSocInf(Discrete):
         l2 = .5
 
     	# Update posterior jump probability
-        theta_pre = self.h * (1-self.theta[-1])
-        theta = l2 * theta_pre/( l1 * (1-theta_pre) +  l2 * theta_pre)
+        theta_pre = self.h * (1 - self.theta[-1])
+        theta = l2 * theta_pre/( l1 * (1 - theta_pre) +  l2 * theta_pre)
 
         sig = (sig1 * sig2)/((1  - theta) * sig2 + theta * sig1)
         self.mu.append(sig*(mu1*(1-theta)/sig1 + mu2*theta/sig2))

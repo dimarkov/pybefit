@@ -18,8 +18,12 @@ __all__ = [
         'RLTempRevLearn'
 ]
 
+softplus = torch.nn.Softplus()
 
 class RLSocInf(Discrete):
+    """Reiforcement learning agent (using Rescorla-Wagner learning rule) for 
+    the Social Influence task.
+    """
 
     def __init__(self, runs=1, blocks=1, trials=1):
 
@@ -28,12 +32,12 @@ class RLSocInf(Discrete):
         no = 2  # number of outcomes
         super(RLSocInf, self).__init__(runs, blocks, trials, na, ns, no)
 
-    def set_parameters(self, x=None):
+    def set_parameters(self, x=None, **kwargs):
 
         if x is not None:
             self.alpha = x[..., 0].sigmoid()
             self.zeta = x[..., 1].sigmoid()
-            self.beta = x[..., 2].exp()
+            self.beta = softplus(x[..., 2])
             self.bias = x[..., 3]
         else:
             self.alpha = .25*ones(self.runs)
@@ -57,7 +61,7 @@ class RLSocInf(Discrete):
         o = response_outcomes[-1][:, -2]
 
         # update choice values
-        self.values.append(V + mask*self.alpha*(o - V))
+        self.values.append(V + mask * self.alpha * (o - V))
 
     def planning(self, b, t, offers):
         """Compute response probability from values."""

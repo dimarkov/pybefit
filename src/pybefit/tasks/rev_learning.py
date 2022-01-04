@@ -39,14 +39,13 @@ class SocialInfluence(object):
         """Generate stimuli for the current block and trial
         """
         reliability = self.stimuli['reliability'][block, trial]
-        reward_if_follow = 2*reliability - 1
+        reward_if_follow = 2 * reliability - 1
         reward_if_reject = - reward_if_follow
         reward = torch.stack([reward_if_reject, reward_if_follow], -1)
 
         # list of different outcomes
-        # 0 - is advice reliable (0,1)
-        # 1 - reward if one would follow the advice
-        # 2 - reward dependent on agents choice
+        # position 0 - reward if one would follow the advice
+        # position 1 - reward dependent on agents choice
 
         outcomes = torch.stack([reward_if_follow, reward[range(len(responses)), responses]], -1)
 
