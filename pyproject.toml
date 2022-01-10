@@ -1,0 +1,34 @@
+[tool.poetry]
+name = "PyBefit"
+version = "0.1.0"
+description = "PyBefit is a Python library for Bayesian analysis of behavioral data."
+authors = ["Dimitrije Markovic <dimitrije.markovic@tu-dresden.de>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.11"
+numpy = "^1.21.4"
+pandas = "^1.3.5"
+matplotlib = "^3.5.1"
+seaborn = "^0.11.2"
+pyro-ppl = ">=1.8.0"
+numpyro = ">=0.8.0"
+jupyter = {extras = ["black"], version = "^1.0.0"}
+nb-black = "^1.0.7"
+
+[tool.poe.tasks]
+## PyTorch with CUDA 11.3
+## Jax with CUDA 11.1
+## Run with the commands "poe force-cuda11-torch" and "poe force-cuda11-jax"
+## See https://github.com/python-poetry/poetry/issues/2543
+force-cuda11-torch = "pip install torch==1.10.1+cu113 torchvision==0.11.2+cu113 torchaudio==0.10.1+cu113 --upgrade -f https://download.pytorch.org/whl/cu113/torch_stable.html"
+force-cuda11-jax = "pip install 'jax[cuda]' --upgrade -f https://storage.googleapis.com/jax-releases/jax_releases.html"
+
+
+[tool.poetry.dev-dependencies]
+poethepoet = ">=0.11.0"
+black = ">=21.12b0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
