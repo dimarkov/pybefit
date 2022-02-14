@@ -5,20 +5,25 @@ package_dir = \
 {'': 'src'}
 
 packages = \
-['pybefit', 'pybefit.agents', 'pybefit.inference', 'pybefit.tasks']
+['pybefit',
+ 'pybefit.agents',
+ 'pybefit.agents.jax',
+ 'pybefit.agents.torch',
+ 'pybefit.inference',
+ 'pybefit.tasks']
 
 package_data = \
 {'': ['*']}
 
 install_requires = \
-['jupyter[black]>=1.0.0,<2.0.0',
- 'matplotlib>=3.5.1,<4.0.0',
- 'nb-black>=1.0.7,<2.0.0',
- 'numpy>=1.21.4,<2.0.0',
- 'numpyro>=0.8.0,<0.9.0',
- 'pandas>=1.3.5,<2.0.0',
- 'pyro-ppl>=1.8.0,<2.0.0',
- 'seaborn>=0.11.2,<0.12.0']
+['jupyter>=1.0.0',
+ 'matplotlib>=3.5.1',
+ 'nb-black>=1.0.7',
+ 'numpy>=1.22.1',
+ 'numpyro>=0.8.0',
+ 'pandas>=1.4.0',
+ 'pyro-ppl>=1.8.0',
+ 'seaborn>=0.11.2']
 
 setup_kwargs = {
     'name': 'pybefit',
