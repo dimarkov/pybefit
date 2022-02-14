@@ -11,7 +11,7 @@ import torch
 from torch import ones, zeros, zeros_like, arange
 from torch.distributions import Categorical
 
-from .agent import Discrete
+from ..agent import Discrete
 
 __all__ = [
         'RLSocInf',

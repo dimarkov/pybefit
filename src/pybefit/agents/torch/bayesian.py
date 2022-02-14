@@ -14,7 +14,7 @@ from opt_einsum import contract
 
 from torch.distributions import Categorical
 
-from .agent import Discrete
+from ..agent import Discrete
 
 softplus = torch.nn.functional.softplus
 

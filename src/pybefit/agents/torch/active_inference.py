@@ -17,7 +17,7 @@ from numpy import nan_to_num
 
 from itertools import product
 
-from .agent import Discrete
+from ..agent import Discrete
 
 __all__ = [
         'AIBandits',

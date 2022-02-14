@@ -9,7 +9,7 @@ Created on Thu Feb 22 17:50:01 2018
 from torch import ones, zeros, arange
 from torch.distributions import Categorical
 
-from .agent import Discrete
+from ..agent import Discrete
 
 __all__ = [
         'Random'
