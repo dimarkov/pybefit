@@ -16,7 +16,7 @@ import jax.numpy as jnp
 
 import numpyro as npyro
 
-from agents import Agent
+from pybefit.agents import HSMMAI as Agent
 from utils import estimate_beliefs, simulator, log_pred_density
 from utils import generative_model as model
 from jax import random, devices, device_put
