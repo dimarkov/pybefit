@@ -11,20 +11,23 @@ numpy = ">=1.22.1"
 pandas = ">=1.4.0"
 matplotlib = ">=3.5.1"
 seaborn = ">=0.11.2"
-pyro-ppl = ">=1.8.0"
-numpyro = ">=0.8.0"
+pyro-ppl = "^1.8.0"
+numpyro = "^0.9.1"
 jupyter = {extras = ["black"], version = ">=1.0.0"}
 nb-black = ">=1.0.7"
 jupyterthemes = ">=0.20.0"
+torch = "^1.11.0"
+jax = "^0.3.3"
+jaxlib = "^0.3.2"
+pycm = "^3.4"
 
 [tool.poe.tasks]
 ## PyTorch with CUDA 11.3
 ## Jax with CUDA 11.1
 ## Run with the commands "poe force-cuda11-torch" and "poe force-cuda11-jax"
 ## See https://github.com/python-poetry/poetry/issues/2543
-force-cuda11-torch = "pip install torch==1.10.2+cu113 torchvision==0.11.3+cu113 torchaudio==0.10.2+cu113 --upgrade -f https://download.pytorch.org/whl/cu113/torch_stable.html"
+force-cuda11-torch = "pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0+cu113 --upgrade -f https://download.pytorch.org/whl/cu113/torch_stable.html"
 force-cuda11-jax = "pip install 'jax[cuda11_cudnn82]' --upgrade -f https://storage.googleapis.com/jax-releases/jax_releases.html"
-
 
 [tool.poetry.dev-dependencies]
 poethepoet = ">=0.11.0"
