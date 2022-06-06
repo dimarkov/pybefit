@@ -87,7 +87,6 @@ def trials_until_correct(correct, state, τ=2):
 
     return tuc
 
-
 def trials_until_explore(explore, state):
     # mark trial on which state switch occured
     state_switch = np.insert(np.abs(np.diff(state, axis=-1)), 0, 0, axis=-1)
@@ -115,17 +114,14 @@ def trials_until_explore(explore, state):
     # retrun mean trials until correct across the experiment for each participant and sample
     return trials_until_explore
 
-
 def running_mean(x, ws=20):
     z = np.insert(x, 0, np.nan, axis=-1)
     cumsum = np.nancumsum(z, -1)
     count = np.cumsum(~np.isnan(z), -1)
     return (cumsum[..., ws:] - cumsum[..., :-ws]) / (count[..., ws:] - count[..., :-ws])
 
-
 def odds(x):
     return x/(1 - x)
-
 
 def performance(correct, ws=100):
     return odds(running_mean(correct.T, ws=ws))
