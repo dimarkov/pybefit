@@ -27,6 +27,7 @@ def simulator(process, agent, gamma, seed=0, **model_kw):
         rng_key, prior = carry
         
         rng_key, _rng_key = random.split(rng_key)
+
         choices = agent.action_selection(_rng_key, prior, gamma=gamma[..., t, :], **model_kw)
         
         outcomes = process(t, choices)
@@ -34,7 +35,8 @@ def simulator(process, agent, gamma, seed=0, **model_kw):
         posterior = agent.learning(t, outcomes, choices, prior)
                 
         return (rng_key, posterior), {'outcomes': outcomes, 
-                                      'choices': choices}
+                                      'choices': choices,
+                                      'logits': agent.logits}
     
     rng_key = random.PRNGKey(seed)
     _, sequence = lax.scan(sim_fn, (rng_key, agent.prior), jnp.arange(agent.T))
@@ -156,27 +158,30 @@ def gammadyn_single_model(beliefs, y, mask):
     T, _ = beliefs[0].shape
 
     gamma = npyro.sample('gamma', dist.InverseGamma(2., 2.))
+    mu = jnp.log(jnp.exp(gamma) - 1)
 
-    lam12 = npyro.sample('lam12', dist.HalfCauchy(1.).expand([2]).to_event(1))
-    lam34 = npyro.sample('lam34', dist.HalfCauchy(1.))
 
-    _lam34 = jnp.expand_dims(lam34, -1)
-    lam0 = npyro.deterministic('lam0', jnp.concatenate([lam12.cumsum(-1), _lam34, _lam34], -1))
-    U = jnp.log(lam0) - jnp.log(lam0.sum(-1, keepdims=True))
+    p = npyro.sample('p', dist.Dirichlet(jnp.ones(3)))
+    p0 = npyro.deterministic('p0', 
+        jnp.concatenate([p[..., :1]/2, p[..., :1]/2 + p[..., 1:2], p[..., 2:]/2, p[..., 2:]/2], -1)
+    )
 
-    scale = npyro.sample('scale', dist.HalfNormal(1.))
-    theta = npyro.sample('theta', dist.HalfCauchy(5.))
-    rho = jnp.exp(- theta)
-    sigma = jnp.sqrt( (1 - rho**2) / (2 * theta) ) * scale
+    scale = npyro.sample('scale',  dist.Gamma(1., 1.))
+    rho = npyro.sample('rho', dist.Beta(1., 2.))
+    sigma = jnp.sqrt( - (1 - rho**2) / (2 * jnp.log(rho)) ) * scale
 
-    x0 = jnp.zeros(1)
+    U = jnp.log(p0)
 
     def transition_fn(carry, t):
         x_prev = carry
 
-        dyn_gamma = npyro.deterministic('dyn_gamma', nn.softplus( jnp.log(jnp.exp(gamma) - 1) + x_prev))
+        dyn_gamma = npyro.deterministic('dyn_gamma', nn.softplus( mu + x_prev ))
 
-        logs = logits((beliefs[0][t], beliefs[1][t]), jnp.expand_dims(gamma, -1), jnp.expand_dims(U, -2))
+        logs = logits(
+            (beliefs[0][t], beliefs[1][t]),
+            jnp.expand_dims(dyn_gamma, -1),
+            jnp.expand_dims(U, -2)
+        )
 
         npyro.sample('y', dist.CategoricalLogits(logs).mask(mask[t]))
         noise = npyro.sample('dw', dist.Normal(0., 1.))
@@ -185,6 +190,7 @@ def gammadyn_single_model(beliefs, y, mask):
 
         return x_next, None
 
+    x0 = jnp.zeros(1)
     with npyro.handlers.condition(data={"y": y}):
         scan(
             transition_fn, x0, jnp.arange(T)
@@ -229,18 +235,22 @@ def prefdyn_single_model(beliefs, y, mask):
 def nondyn_single_model(beliefs, y, mask):
     T, _ = beliefs[0].shape
 
-    lam12 = npyro.sample('lam12', dist.HalfCauchy(1.).expand([2]).to_event(1))
-    lam34 = npyro.sample('lam34', dist.HalfCauchy(1.))
+    gamma = npyro.sample('gamma', dist.InverseGamma(2., 3.))
 
-    _lam34 = jnp.expand_dims(lam34, -1)
-    lam0 = npyro.deterministic('lam0', jnp.concatenate([lam12.cumsum(-1), _lam34, _lam34], -1))
+    p = npyro.sample('p', dist.Dirichlet(jnp.ones(3)))
+    p0 = npyro.deterministic('p0', 
+        jnp.concatenate([p[..., :1]/2, p[..., :1]/2 + p[..., 1:2], p[..., 2:]/2, p[..., 2:]/2], -1)
+    )
 
-    U = jnp.log(lam0) - jnp.log(lam0.sum(-1, keepdims=True))
-    gamma = npyro.sample('gamma', dist.InverseGamma(2., 2.))
+    U = jnp.log(p0)
 
     def transition_fn(carry, t):
 
-        logs = logits((beliefs[0][t], beliefs[1][t]), jnp.expand_dims(gamma, -1), jnp.expand_dims(U, -2))
+        logs = logits(
+            (beliefs[0][t], beliefs[1][t]), 
+            jnp.expand_dims(gamma, -1), 
+            jnp.expand_dims(U, -2)
+        )
         npyro.sample('y', dist.CategoricalLogits(logs).mask(mask[t]))
 
         return None, None
@@ -422,7 +432,7 @@ def nondynamic_mixture_model(beliefs, y, mask):
 
     assert weights.shape == (M,)
 
-    gamma = npyro.sample('gamma', dist.InverseGamma(2., 2.))
+    gamma = npyro.sample('gamma', dist.InverseGamma(2., 5.))
     
     p = npyro.sample('p', dist.Dirichlet(jnp.ones(3)))
     

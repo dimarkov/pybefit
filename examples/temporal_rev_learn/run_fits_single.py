@@ -31,8 +31,8 @@ def main(m, seed, device, dynamic_gamma, dynamic_preference):
     outcomes_data = jnp.array(outcomes_data).astype(jnp.int32)
 
     rng_key = random.PRNGKey(seed)
-    cutoff_up = 800
-    cutoff_down = 100
+    cutoff_up = 1000
+    cutoff_down = 400
 
     print(m, seed, dynamic_gamma, dynamic_preference)
     
@@ -93,7 +93,7 @@ def main(m, seed, device, dynamic_gamma, dynamic_preference):
 
     print('waic', waic.mean())
 
-    jnp.savez('fit_waic_sample/fit_waic_sample_minf{}_gamma{}_pref{}.npz'.format(m, int(dynamic_gamma), int(dynamic_preference)), samples=samples, waic=waic, log_likelihood=log_likelihood)
+    jnp.savez('fit_data/fit_waic_sample_minf{}_gamma{}_pref{}_long.npz'.format(m, int(dynamic_gamma), int(dynamic_preference)), samples=samples, waic=waic, log_likelihood=log_likelihood)
 
 
 if __name__ == "__main__":

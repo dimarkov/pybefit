@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Implementation of active inference agent for temporal reversal learning task 
-in numpyro
+Implementation of active inference agent for temporal reversal learning task in numpyro.
 @author: Dimitrije Markovic
 """
 import numpy as np
@@ -87,6 +86,8 @@ class HSMMAI(object):
             self.mask = device_put(jnp.broadcast_to(mask, (T, N)), self.device)
         
         assert self.mask.shape == (T, N)
+
+        self.logits = None
         
         self.__make_transition_matrices()
         self.__set_prior(**prior_kwargs)
@@ -157,7 +158,9 @@ class HSMMAI(object):
         else:
             U = self.U
 
-        return random.categorical(rng_key, logits(beliefs, gamma, U))
+        self.logits = logits(beliefs, gamma, U)
+
+        return random.categorical(rng_key, self.logits)
 
     def learning(self, t, observations, responses, prior):
         # parametric learning and inference

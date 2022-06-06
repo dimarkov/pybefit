@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Infer paramaters and posterior probability of different models $m=(\nu_{min}, \nu_{max})$,
+Infer paramaters and posterior probability of different models $M=(\nu_{min}, \nu_{max})$,
 from behavioural data under the hierarchical mixture model.
 @author: Dimitrije Markovic
 """
@@ -14,7 +14,7 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 import argparse
 import numpyro as npyro
 
-def main(seed, device, dynamic_gamma, dynamic_preference):
+def main(seed, device, dynamic_gamma, dynamic_preference, mc_type):
 
     import jax.numpy as jnp
     from numpyro.infer import MCMC, NUTS
@@ -37,16 +37,22 @@ def main(seed, device, dynamic_gamma, dynamic_preference):
     o_data = jnp.array(outcomes_data).astype(jnp.int32)
 
     rng_key = random.PRNGKey(seed)
-    cutoff_up = 800
+    cutoff_up = 1000
     cutoff_down = 400
 
     priors = []
     params = []
-    for m in range(1, 11):
-        if m <= 10:
-            seq, _ = estimate_beliefs(o_data, r_data, device, mask=m_data, nu_max=m)
+
+    if mc_type == 'nu_max':
+        M_rng = list(range(1, 11))  # model comparison for regular condition
+    else:
+        M_rng = [1,] + list(range(11, 20))  # model comparison for irregular condition
+
+    for M in M_rng:
+        if M <= 10:
+            seq, _ = estimate_beliefs(o_data, r_data, device, mask=m_data, nu_max=M)
         else:
-            seq, _ = estimate_beliefs(o_data, r_data, device, mask=m_data, nu_max=10, nu_min=m-10)
+            seq, _ = estimate_beliefs(o_data, r_data, device, mask=m_data, nu_max=10, nu_min=M-10)
         
         priors.append(seq['beliefs'][0][cutoff_down:cutoff_up])
         params.append(seq['beliefs'][1][cutoff_down:cutoff_up])
@@ -109,16 +115,17 @@ def main(seed, device, dynamic_gamma, dynamic_preference):
 
     print('potential_energy', potential_energy)     
 
-    jnp.savez('fit_waic_sample/fit_sample_mixture_gamma{}_pref_{}_short.npz'.format(int(dynamic_gamma), int(dynamic_preference)), samples=samples)
+    jnp.savez('fit_data/fit_sample_mixture_gamma{}_pref{}_{}.npz'.format(int(dynamic_gamma), int(dynamic_preference), mc_type), samples=samples)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model estimates behavioral data")
-    parser.add_argument("-s", "--seed", default=0, type=int)
+    parser.add_argument("-s", "--seed", default=110, type=int)
     parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
     parser.add_argument("-dg", "--dynamic-gamma", action='store_true', help="make gamma parameter dynamic")
     parser.add_argument("-dp", "--dynamic-preference", action='store_true', help="make preference parameters dynamic")
+    parser.add_argument("-mc", "--mc-type", default="nu_max", type=str, help='use "nu_max" or "nu_min".')
     args = parser.parse_args()
 
     npyro.set_platform(args.device)
     npyro.enable_x64()
-    main(args.seed, args.device, args.dynamic_gamma, args.dynamic_preference)
+    main(args.seed, args.device, args.dynamic_gamma, args.dynamic_preference, args.mc_type)
