@@ -5,37 +5,53 @@ PyBefit is a Python library for Bayesian analysis of behavioral data. It is base
 
 Requirements
 ------------
-
-numpy
-pandas
-pyro
-pytorch
-numpyro
-jax
-jaxlib
-matplotlib
-seaborn
+    numpy
+    pandas
+    matplotlib
+    seaborn
+    pyro
+    pytorch
+    numpyro
+    jax
+    jaxlib
 
 Installation
 ------------
-The easiest way to install required libraries and the PyBefit package is using [poetry](https://conda.io/miniconda.html) package manager. Inside the project root directory run 
+
+### Poetry
+The easiest way to install required libraries and the PyBefit package is using [poetry](https://python-poetry.org/) package manager. Inside the project root directory run 
 ```sh
 poetry install
 poetry shell
 ```
 
-If cuda support is present and required for your work, simply run the following commands
+If cuda support required for your work, simply run the following commands
 ```sh
-poetry shell pip install pip --upgrade
-poetry shell poe force-cuda11-torch
-poetry shell poe force-cuda11-jax
+poetry run pip install pip --upgrade
+poetry run poe force-cuda11-torch
+poetry run poe force-cuda11-jax
 ```
-This will upgrade pytorch and jax to the version with cuda 
-support.
+This will upgrade pytorch and jax to the versions with the support for the latest cuda version.
 
-If you prefer different environment managers you can install pybefit using the provided 'setup.py' with 
+### Anaconda
+If you prefer [anaconda](https://conda.io/miniconda.html) install pybefit using the following steps 
 ```sh
-python setup.py develop
+conda create -n befit python=3.10 jupyterlab matplotlib seaborn pandas jax cuda-nvcc pytorch torchvision torchaudio cudatoolkit=11.6 -c pytorch -c conda-forge -c nvidia
+```
+for cuda support or 
+```sh
+conda create -n befit python=3.10 jupyterlab matplotlib seaborn pandas pytorch torchvision torchaudio cpuonly -c pytorch
+```
+for cpu only version of pytorch and jax. 
+
+Next activate the environment
+```sh
+conda activate befit
+```
+and install pybefit by running the following from the root of the pybefit directory
+```sh
+pip install pip --upgrade
+pip install -e .
 ```
 
 Examples
@@ -45,8 +61,9 @@ PyBefit is used as a basis for several projects:
 
  * The code and notebooks in `examples/social_influence/` shows the analysis of behavioural data of subjects in different age groups performing the [social influence task](https://academic.oup.com/scan/article/12/4/618/2948767?login=true). We use a range of computational models of behaviour in changing environments and present their age group dependent comparison.
 
- * The code and notebooks in `examples/temporal_rev_learn` shows analysis of unpublished behavioural data of subjects 
- performing a [temporally structured reversal learning task](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1006707). The goal here is to demonstrate particpants learning of latent temporal strucure of a noisy dynamic environment using a model-based analysis.
+ * The code and notebooks in `examples/temporal_rev_learn` acompanies the following paper (still under revision) - [Markovic, Dimitrije, Andrea MF Reiter, and Stefan J. Kiebel. "Revealing human sensitivity to a latent temporal structure of changes." bioRxiv (2022)](https://www.biorxiv.org/content/10.1101/2022.06.05.494870v1.abstract). In the paper we analyse the behavioural data of subjects performing a temporally structured reversal learning task. The goal here is to demonstrate subjects' learning of latent temporal strucure of a noisy and dynamic environment.
+
+ * The code and notebooks in `examples/plandepth` illustrates the model for inferring participants planning depth, while they are performing the Space Adventure Task [SAT](https://github.com/dimarkov/sat).
 
 License
 -------
