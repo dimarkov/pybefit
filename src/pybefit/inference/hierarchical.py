@@ -3,13 +3,13 @@
 
 import torch
 from torch import zeros, ones
-from torch.distributions import constraints, biject_to
+from torch.distributions import biject_to
 
 import pyro.distributions as dist
-from pyro import sample, param, plate, poutine
+from pyro import sample, param, plate, poutine, deterministic
+from pyro.distributions import constraints
 from pyro.distributions.util import sum_rightmost
-from pyro.ops.indexing import Vindex
-from pyro.infer.reparam import TransformReparam
+from pyro.infer.reparam import LocScaleReparam
 
 from .infer import Inferrer
 
@@ -42,11 +42,12 @@ class Horseshoe(Inferrer):
         lam = param('lam', ones(1), constraint=constraints.positive)
         tau = sample('tau', dist.HalfCauchy(ones(npar)).to_event(1))
 
+        sigma = deterministic('sigma', lam * tau)
+
         # define prior mean over model parametrs and subjects
         with plate('runs', runs):
-            base_dist = dist.Normal(0., 1.).expand([npar]).to_event(1)
-            transform = dist.transforms.AffineTransform(mu, lam * tau)
-            locs = sample('locs', dist.TransformedDistribution(base_dist, [transform]))
+            with poutine.reparam(config={"locs": LocScaleReparam()}):
+                locs = sample('locs', dist.Normal(mu, sigma).to_event(1))
 
             if self.fixed_values:
                 x = zeros(runs, self.agent.npar)
@@ -107,7 +108,7 @@ class Horseshoe(Inferrer):
                         constraint=constraints.lower_cholesky)
 
         with plate('runs', nsub):
-            sample("locs", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
+            sample("locs_decentrilised", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
 
     def _get_quantiles(self, quantiles):
         """
@@ -157,20 +158,20 @@ class NormalGamma(Inferrer):
         # define hyper priors over model parameters
         a = param('a', ones(npar), constraint=constraints.positive)
         lam = param('lam', ones(npar), constraint=constraints.positive)
-        tau = sample('tau', dist.Gamma(a, a/lam).to_event(1))
+        tau = sample('var_tau', dist.Gamma(a, 1).to_event(1))
 
-        sig = 1/torch.sqrt(tau)
+        sigma = deterministic('sigma', torch.sqrt(lam/(a * tau)))
 
         # each model parameter has a hyperprior defining group level mean
         m = param('m', zeros(npar))
         s = param('s', ones(npar), constraint=constraints.positive)
-        mu = sample('mu', dist.Normal(m, s*sig).to_event(1))
+        with poutine.reparam(config={"mu": LocScaleReparam()}):
+            mu = sample('mu', dist.Normal(m, s*sigma).to_event(1))
 
         # define prior mean over model parametrs and subjects
         with plate('runs', runs):
-            base_dist = dist.Normal(0., 1.).expand_by([npar]).to_event(1)
-            transform = dist.transforms.AffineTransform(mu, sig)
-            locs = sample('locs', dist.TransformedDistribution(base_dist, [transform]))
+            with poutine.reparam(config={"mu": LocScaleReparam()}):
+                locs = sample('locs', dist.Normal(mu, sigma).to_event(1))
 
             if self.fixed_values:
                 x = zeros(locs.shape[:-1] + (self.agent.npar,))
@@ -225,7 +226,7 @@ class NormalGamma(Inferrer):
         ld_tau = trns.inv.log_abs_det_jacobian(c_tau, unc_tau)
         ld_tau = sum_rightmost(ld_tau, ld_tau.dim() - c_tau.dim() + 1)
 
-        mu = sample("mu", dist.Delta(unc_mu, event_dim=1))
+        mu = sample("mu_decentered", dist.Delta(unc_mu, event_dim=1))
         tau = sample("tau", dist.Delta(c_tau, log_density=ld_tau, event_dim=1))
 
         m_locs = param('m_locs', zeros(nsub, npar))
@@ -234,9 +235,7 @@ class NormalGamma(Inferrer):
                         constraint=constraints.lower_cholesky)
 
         with plate('runs', nsub):
-            locs = sample("locs", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
-
-        return {'tau': tau, 'mu': mu, 'locs': locs}
+            locs = sample("locs_decentered", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
 
     def _get_quantiles(self, quantiles):
         """

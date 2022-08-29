@@ -2,17 +2,15 @@
 different modules that govern agent's behavior.
 """
 
-from pyro.infer.reparam.transform import TransformReparam
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
 
 import torch
-from torch import zeros, ones, tensor
+from torch import zeros, ones
 
-from pyro import clear_param_store, get_param_store, poutine
-from pyro.infer import SVI, Trace_ELBO
-from pyro.infer import autoguide
+from pyro import param, clear_param_store, get_param_store
+from pyro.infer import SVI, Trace_ELBO, TraceEnum_ELBO
 from pyro.infer.enum import get_importance_trace
 from pyro.infer.predictive import Predictive
 from pyro.optim import Adam
@@ -21,10 +19,9 @@ __all__ = [
     'Inferrer'
 ]
 
-
 class Inferrer(object):
 
-    def __init__(self, agent, stimulus, responses, mask=None, fixed_params=None):
+    def __init__(self, agent, stimulus, responses, mask=None, fixed_params=None, enumerate=False):
 
         self.agent = agent  # agent used for computing response probabilities
         self.stimulus = stimulus  # stimulus and action outcomes presented to each participant
@@ -52,13 +49,15 @@ class Inferrer(object):
             self.npar = agent.npar
             self.fixed_values = False
 
+        self.enumerate = enumerate
+
     def model(self):
         """
         Full generative model of behavior.
         """
         raise NotImplementedError
 
-    def custom_guide(self):
+    def guide(self):
         """Approximate posterior over model parameters.
         """
         raise NotImplementedError
@@ -73,12 +72,15 @@ class Inferrer(object):
         clear_param_store()
 
         model = self.model
-        guide = self.guide        
+        guide = self.guide
+        if self.enumerate:
+            elbo = TraceEnum_ELBO(num_particles=num_particles, vectorize_particles=True)
+        else:
+            elbo = Trace_ELBO(num_particles=num_particles, vectorize_particles=True)
         svi = SVI(model=model,
                   guide=guide,
                   optim=Adam(optim_kwargs),
-                  loss=Trace_ELBO(num_particles=num_particles,
-                                  vectorize_particles=True))
+                  loss=elbo)
 
         loss = []
         pbar = tqdm(range(iter_steps), position=0)
@@ -88,16 +90,23 @@ class Inferrer(object):
             if np.isnan(loss[-1]):
                 break
 
-        self.loss = loss
+        param_store = get_param_store()
+        parameters = {}
+        for name in param_store.get_all_param_names():
+            parameters[name] = param(name)
 
-    def sample_posterior(self, labels, num_samples=10000):
+        self.parameters = parameters
+        self.loss = loss
+        self.elbo = elbo
+
+    def sample_posterior(self, labels, num_samples=1000):
         """Generate samples from posterior distribution.
         """
         nsub = self.runs
         npar = self.npar
         assert npar == len(labels)
 
-        sites = ['tau', 'mu', 'locs']
+        sites = ['sigma', 'mu', 'locs']
         predict = Predictive(self.model, guide=self.guide, num_samples=num_samples, return_sites=sites, parallel=True)
         samples = predict()
 
@@ -116,17 +125,42 @@ class Inferrer(object):
         self.agent.set_parameters(x)
         pars = []
         for lab in labels:
-            pars.append(getattr(self.agent, lab).reshape(-1).numpy())
+            pars.append(getattr(self.agent, lab[2:-1]).reshape(-1).numpy())
         pars_df = pd.DataFrame(data=np.stack(pars, -1), columns=labels)
         pars_df['subject'] = subject_id.numpy()
 
         mu = np.take(samples['mu'].detach().numpy(), 0, axis=-2)
-        tau = np.take(samples['tau'].detach().numpy(), 0, axis=-2)
+        sigma = np.take(samples['sigma'].detach().numpy(), 0, axis=-2)
 
         mu_df = pd.DataFrame(data=mu, columns=labels)
-        tau_df = pd.DataFrame(data=tau, columns=labels)
+        sigma_df = pd.DataFrame(data=sigma, columns=labels)
 
-        return (trans_pars_df, pars_df, mu_df, tau_df)
+        return (trans_pars_df, pars_df, mu_df, sigma_df)
+
+
+    def sample_posterior_marginal(self, n_samples=100):
+        '''Draw posterior samples over descrete variables in the model'''
+        if self.enumerate:
+            elbo = TraceEnum_ELBO()
+            post_discrete_samples = {}
+
+            pbar = tqdm(range(n_samples), position=0)
+
+            for n in pbar:
+                pbar.set_description("Sample posterior discrete marginal")
+                # get marginal posterior over planning depths
+                post_sample = elbo.compute_marginals(self.model, self.guide)
+                for name in post_sample.keys():
+                    post_discrete_samples.setdefault(name, [])
+                    post_discrete_samples[name].append(post_sample[name].probs.detach().clone())
+
+            for name in post_discrete_samples.keys():
+                post_discrete_samples[name] = torch.stack(post_discrete_samples[name]).numpy()
+
+            return post_discrete_samples
+        else:
+            print("No enumerate variables in the model")
+            return -1
 
     def _get_quantiles(self, quantiles):
         """
