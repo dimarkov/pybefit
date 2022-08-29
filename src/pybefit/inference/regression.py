@@ -63,32 +63,39 @@ class BayesRegression(object):
         
     def model(self, obs=None):
 
-        if self.p0 is None:
-            if self.batch > 1:
-                a = sample('a', dist.InverseGamma(1/2, 1/2))
-                b = sample('b', dist.InverseGamma(1/2, 1/2))
+        if self.batch > 1:
+            a = sample('a', dist.InverseGamma(1/2, 1/2))
+            b = sample('b', dist.InverseGamma(1/2, 1/2))
 
+            s = sample('s', dist.Exponential(jnp.ones(self.D)).to_event(1))
+            m = sample('m', dist.Normal(jnp.zeros(self.D), 1.).to_event(1))
+
+            if self.p0 is None:
                 rho = sample('rho', dist.Beta(1., 1.))
                 p0 = deterministic('p0', 1 + (self.D - 1) * rho)
             else:
-                a = 2.
-                b = 2.
+                p0 = self.p0
         else:
-            p0 = self.p0
-               
+            a = 2.
+            b = 2.
+            m = 0.
+            s = 1.
+
+            if self.p0 is None:
+                p0 = self.D
+            else:
+                p0 = self.p0
+        
+        gb = deterministic('group_beta', m * s)
+                
         with plate('batch', self.batch):
             sigma_sqr = sample('var_sigma^2', dist.InverseGamma(a, 1.))
             sigma = deterministic('sigma', jnp.sqrt(b * sigma_sqr))
-            if self.p0 is None:
-                if self.batch > 1:
-                    tau0 = p0 * sigma / ((self.D + 1 - p0) * jnp.sqrt(self.N))
-                    tau = sample('tau', dist.HalfCauchy(tau0))
-                else:
-                    tau = self.tau * sigma
-            else:
-                tau0 = p0 * sigma / ((self.D + 1 - p0) * jnp.sqrt(self.N))
-                tau = sample('tau', dist.HalfCauchy(tau0))
-                
+            
+            tau0 = self.tau * p0 * sigma / ((self.D + 1 - p0) * jnp.sqrt(self.N))
+            var_tau = sample('var_tau', dist.HalfCauchy(1.))
+            tau = deterministic('tau', tau0 * var_tau)
+
             if self.fixed_lam:
                 lam = deterministic('lam', jnp.ones(self.D))
             else:
@@ -96,7 +103,7 @@ class BayesRegression(object):
 
             if self.with_qr:
                 rt = QRTransform(self.R, self.R_inv)
-                aff = AffineTransform(0., jnp.expand_dims(tau, -1) * lam)
+                aff = AffineTransform(gb, jnp.expand_dims(tau, -1) * lam)
                 ct = ComposeTransform([aff, rt])
                 with handlers.reparam(config={"theta": TransformReparam()}):
                     theta = sample(
