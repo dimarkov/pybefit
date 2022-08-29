@@ -57,8 +57,6 @@ class NormalGammaDiscreteDepth(Inferrer):
         nblk = self.nb  # number of mini-blocks
         nsub = self.runs  # number of subjects
 
-        # define hyper priors over model parameters.
-
         # define prior uncertanty over model parameters and subjects
         a = param('a', ones(np), constraint=constraints.softplus_positive)
         lam = param('lam', ones(np), constraint=constraints.softplus_positive)
@@ -69,14 +67,14 @@ class NormalGammaDiscreteDepth(Inferrer):
         # each model parameter has a hyperprior defining group level mean
         m = param('m', zeros(np))
         s = param('s', ones(np), constraint=constraints.softplus_positive)
-        with poutine.reparam(config={"mu": LocScaleReparam(0.)}):
+        with poutine.reparam(config={"mu": LocScaleReparam()}):
             mu = sample("mu", dist.Normal(m, s*sig).to_event(1))
 
         ac12 = param("alphas12", ones(2, 2), constraint=constraints.softplus_positive)
         ac34 = param("alphas34", ones(2, 3), constraint=constraints.softplus_positive)
 
         with plate('subjects', nsub):
-            with poutine.reparam(config={"locs": LocScaleReparam(0.)}):
+            with poutine.reparam(config={"locs": LocScaleReparam()}):
                 locs = sample("locs", dist.Normal(mu, sig).to_event(1))
             
             # define priors over planning depth
@@ -163,34 +161,3 @@ class NormalGammaDiscreteDepth(Inferrer):
             sample("locs_decentered", dist.MultivariateNormal(m_locs, scale_tril=st_locs))
             sample("probs_cond_12", dist.Dirichlet(alpha_12).to_event(1))
             sample("probs_cond_34", dist.Dirichlet(alpha_34).to_event(1))
-
-    def _get_quantiles(self, quantiles):
-        """
-        Returns posterior quantiles each latent variable.
-
-        :param quantiles: A list of requested quantiles between 0 and 1.
-        :type quantiles: torch.Tensor or list
-        :return: A dict mapping sample site name to a list of quantile values.
-        :rtype: dict
-        """
-
-        self.means = [param('m_locs'), param('m_hyp')]
-        self.stds = [param('scale_tril_hyp'), param('scale_tril_locs')]
-
-        quantiles = torch.tensor(quantiles).reshape(1, 3)
-
-        m_locs = param('m_locs').reshape(-1, 1)
-        s_locs = param('scale_tril_locs').diagonal(dim1=-2, dim2=-1).reshape(-1, 1)
-
-        latents = dist.Normal(m_locs, s_locs).icdf(quantiles).reshape(self.runs, -1, 3)
-        result = {'locs': latents}
-
-        m_hyp = param('m_hyp').reshape(-1, 1)
-        s_hyp = param('scale_tril_hyp').diagonal(dim1=-2, dim2=-1).reshape(-1, 1)
-
-        latents = dist.Normal(m_hyp, s_hyp).icdf(quantiles).reshape(-1, 1)
-
-        result['mu'] = latents[:self.npar]
-        result['tau'] = latents[self.npar:].exp()
-
-        return result
