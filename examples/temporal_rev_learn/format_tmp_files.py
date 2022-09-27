@@ -11,7 +11,7 @@ import numpy as np
 
 # %%
 samples = {}
-for filename in glob.glob("fit_sims/tmp*.npz"):
+for filename in glob.glob("results/fit_sims/tmp*.npz"):
     m = int(filename.split('.')[0].split('_')[-1][1:])
     tmp = np.load(filename, allow_pickle=True)['samples'].item()
     samples[m] = tmp
@@ -21,4 +21,4 @@ for filename in glob.glob("fit_sims/tmp*.npz"):
 P_o = [.1, .6, .15, .15] 
 
 # save the file
-np.savez('fit_sims/sims_mcomp_P-{}-{}-{}-{}.npz'.format(*P_o), samples=samples)
+np.savez('results/fit_sims/sims_mcomp_P-{}-{}-{}-{}.npz'.format(*P_o), samples=samples)
