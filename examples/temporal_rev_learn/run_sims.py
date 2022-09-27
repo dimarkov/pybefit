@@ -108,8 +108,8 @@ if __name__ == "__main__":
     U = jnp.log(jnp.array(P_o))
 
     m_max = 10
-    m_rng = range(5, 7)  # comparison based on nu_max
-    # m_rng = [1,] + list(range(10, 20))  # comparison based on nu_min
+    m_rng = range(1, m_max + 1)  # comparison based on nu_max
+    # m_rng = range(1, 20)  # comparison based on nu_max and nu_min
 
     post_smpl = {}
     for m_true in m_rng:
@@ -186,8 +186,8 @@ if __name__ == "__main__":
         del seq_sim, samples, agent
 
     # save posterior estimates
-    jnp.savez('fit_sims/sims_mcomp_P-{}-{}-{}-{}.npz'.format(*P_o), samples=post_smpl)
+    jnp.savez('results/fit_sims/sims_mcomp_P-{}-{}-{}-{}.npz'.format(*P_o), samples=post_smpl)
 
     # delete tmp files
     for m_true in m_rng:
-        os.remove('fit_sims/tmp_sims_m{}.npz'.format(m_true))
+        os.remove('results/fit_sims/tmp_sims_m{}.npz'.format(m_true))

@@ -15,7 +15,7 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 import argparse
 import numpyro as npyro
 
-def main(seed, device, dynamic_gamma, dynamic_preference):
+def main(seed, device):
 
     import jax.numpy as jnp
     from numpyro.infer import MCMC, NUTS, log_likelihood
@@ -29,7 +29,7 @@ def main(seed, device, dynamic_gamma, dynamic_preference):
 
     outcomes_data, responses_data, mask_data, _, _, df = load_data()
 
-    print(seed, device, dynamic_gamma, dynamic_preference)
+    print('seed: {}\n'.format(seed), 'device: {}\n'.format(device))
 
     model = complete_mixture_model
 
@@ -60,22 +60,13 @@ def main(seed, device, dynamic_gamma, dynamic_preference):
     # init preferences
     c0 = jnp.sum(nn.one_hot(outcomes_data[:cutoff_down], 4) * jnp.expand_dims(mask_data[:cutoff_down], -1), 0)
 
-    if dynamic_gamma:
-        num_warmup = 1000
-        num_samples = 1000
-        num_chains = 1
-    else:
-        num_warmup = 200
-        num_samples = 100
-        num_chains = 10
-
     def inference(belief_sequences, obs, mask, conditions, rng_key):
         nuts_kernel = NUTS(model, dense_mass=True)
         mcmc = MCMC(
             nuts_kernel, 
-            num_warmup=num_warmup, 
-            num_samples=num_samples, 
-            num_chains=num_chains,
+            num_warmup=200, 
+            num_samples=100, 
+            num_chains=10,
             chain_method="vectorized",
             progress_bar=True
         )
@@ -139,15 +130,13 @@ def main(seed, device, dynamic_gamma, dynamic_preference):
     exceedance_prob = nn.one_hot(jnp.argmax(weights, -2), num_classes=len(M_rng)).mean(0)
     samples['EP'] = exceedance_prob
 
-    jnp.savez('fit_data/fit_sample_gamma{}_pref{}.npz'.format(int(dynamic_gamma), int(dynamic_preference)), samples=samples)
+    jnp.savez('fit_data/fit_sample.npz', samples=samples)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model estimates behavioral data")
     parser.add_argument("-s", "--seed", default=110, type=int)
     parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
-    parser.add_argument("-dg", "--dynamic-gamma", action='store_true', help="make gamma parameter dynamic")
-    parser.add_argument("-dp", "--dynamic-preference", action='store_true', help="make preference parameters dynamic")
     args = parser.parse_args()
 
     npyro.set_platform(args.device)
-    main(args.seed, args.device, args.dynamic_gamma, args.dynamic_preference)
+    main(args.seed, args.device)
