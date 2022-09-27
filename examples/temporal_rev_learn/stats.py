@@ -8,29 +8,31 @@ Various auxiliary functions for data formating and statistics
 import numpy as np
 import pandas as pd
 
+prefix_path = 'behavioral_data/'
+
 def load_data():
-    df_res = pd.read_csv('main/responses.csv').set_index('subject')
+    df_res = pd.read_csv(prefix_path + 'main/responses.csv').set_index('subject')
     df_res['experiment'] = 'main'
-    _df_res = pd.read_csv('pilot/responses.csv').set_index('subject')
+    _df_res = pd.read_csv(prefix_path + 'pilot/responses.csv').set_index('subject')
     _df_res['experiment'] = 'pilot'
     df_res = pd.concat([df_res, _df_res], ignore_index=True)
     responses = df_res.values[:, :-2].T.astype(float)
 
-    df_out = pd.read_csv('main/outcomes.csv').set_index('subject')
+    df_out = pd.read_csv(prefix_path + 'main/outcomes.csv').set_index('subject')
     df_out['experiment'] = 'main'
     df_out['condition'] = df_res['condition']
 
-    _df_out = pd.read_csv('pilot/outcomes.csv').set_index('subject')
+    _df_out = pd.read_csv(prefix_path + 'pilot/outcomes.csv').set_index('subject')
     _df_out['experiment'] = 'pilot'
     _df_out['condition'] = _df_res['condition']
     df_out = pd.concat([df_out, _df_out], ignore_index=True)
     outcomes = df_out.values[:, :-2].T.astype(float)
 
-    df_cor = pd.read_csv('main/correct_responses.csv').set_index('subject')
+    df_cor = pd.read_csv(prefix_path + 'main/correct_responses.csv').set_index('subject')
     df_cor['experiment'] = 'main'
     df_cor['condition'] = df_res['condition']
 
-    _df_cor = pd.read_csv('pilot/correct_responses.csv').set_index('subject')
+    _df_cor = pd.read_csv(prefix_path + 'pilot/correct_responses.csv').set_index('subject')
     _df_cor['experiment'] = 'pilot'
     _df_cor['condition'] = df_res['condition']
     df_cor = pd.concat([df_cor, _df_cor], ignore_index=True)
