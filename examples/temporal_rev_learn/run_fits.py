@@ -117,11 +117,14 @@ def main(seed, device, dynamic_gamma, dynamic_preference):
     samples, potential_energy = inference(seqs, y, mask, conditions, rng_key)
 
     print('potential_energy', potential_energy)
+    
+    # move arrays to cpu
     samples = device_put(samples, devices('cpu')[0])
     seqs = device_put(seqs, devices('cpu')[0])
     y = device_put(y, devices('cpu')[0])
     mask = device_put(mask, devices('cpu')[0])
     conditions = device_put(conditions, devices('cpu')[0])
+    
     log_ll = log_likelihood(
         model, samples, seqs, y, mask, conditions, parallel=True, aux=True
     )['y'].sum(-2)
@@ -136,7 +139,7 @@ def main(seed, device, dynamic_gamma, dynamic_preference):
     exceedance_prob = nn.one_hot(jnp.argmax(weights, -2), num_classes=len(M_rng)).mean(0)
     samples['EP'] = exceedance_prob
 
-    jnp.savez('fit_data/test_fit_sample_mixture_gamma{}_pref{}.npz'.format(int(dynamic_gamma), int(dynamic_preference)), samples=samples)
+    jnp.savez('fit_data/fit_sample_gamma{}_pref{}.npz'.format(int(dynamic_gamma), int(dynamic_preference)), samples=samples)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model estimates behavioral data")

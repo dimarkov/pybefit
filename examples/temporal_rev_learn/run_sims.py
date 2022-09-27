@@ -70,7 +70,7 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--subjects", default=1, type=int)
     parser.add_argument("-s", "--seed", default=111, type=int)
     parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
-    parser.add_argument("-i", default=0, type=int)
+    parser.add_argument("-i", default=0, type=int)  # select which device to use for simulations and inference
     args = parser.parse_args()
 
     npyro.set_platform(args.device)
@@ -186,8 +186,8 @@ if __name__ == "__main__":
         del seq_sim, samples, agent
 
     # save posterior estimates
-    # jnp.savez('fit_sims/test_sims_mcomp_numax_P-{}-{}-{}-{}.npz'.format(*P_o), samples=post_smpl)
+    jnp.savez('fit_sims/sims_mcomp_P-{}-{}-{}-{}.npz'.format(*P_o), samples=post_smpl)
 
-    # # delete tmp files
-    # for m_true in m_rng:
-    #     os.remove('fit_sims/tmp_sims_m{}.npz'.format(m_true))
+    # delete tmp files
+    for m_true in m_rng:
+        os.remove('fit_sims/tmp_sims_m{}.npz'.format(m_true))
