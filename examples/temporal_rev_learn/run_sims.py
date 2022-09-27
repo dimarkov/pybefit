@@ -18,9 +18,9 @@ import jax.numpy as jnp
 import numpyro as npyro
 
 from pybefit.agents import HSMMAI as Agent
-from utils import estimate_beliefs, simulator, mixture_model
-from jax import random, devices, device_put, nn, jit, vmap
-from numpyro.infer import MCMC, NUTS
+from utils import estimate_beliefs, simulator, complete_mixture_model
+from jax import lax, random, devices, device_put, nn, jit, vmap
+from numpyro.infer import MCMC, NUTS, log_likelihood, Predictive
 from scipy import io
 
 def get_belief_sequence(outcomes, responses, m_inf, cutoff):
@@ -42,22 +42,23 @@ def get_belief_sequence(outcomes, responses, m_inf, cutoff):
     return (seq_sim['beliefs'][0][cutoff:], seq_sim['beliefs'][1][cutoff:])
 
 
-def inference(belief_sequences, obs, mask, rng_key):
-    nuts_kernel = NUTS(mixture_model, dense_mass=True)
+def inference(belief_sequences, obs, mask, conditions, rng_key):
+    nuts_kernel = NUTS(complete_mixture_model, dense_mass=True)
     mcmc = MCMC(
         nuts_kernel, 
         num_warmup=200, 
-        num_samples=200, 
-        num_chains=5,
+        num_samples=100, 
+        num_chains=10,
         chain_method="vectorized",
-        progress_bar=False
+        progress_bar=True
     )
 
     mcmc.run(
         rng_key, 
         belief_sequences, 
         obs, 
-        mask
+        mask,
+        conditions
     )
 
     samples = mcmc.get_samples()
@@ -69,11 +70,12 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--subjects", default=1, type=int)
     parser.add_argument("-s", "--seed", default=111, type=int)
     parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
+    parser.add_argument("-i", default=0, type=int)
     args = parser.parse_args()
 
     npyro.set_platform(args.device)
 
-    device = devices(args.device)[0]
+    device = devices(args.device)[args.i]
     
     rng_key = random.PRNGKey(args.seed)
     cutoff = 400
@@ -105,8 +107,9 @@ if __name__ == "__main__":
     P_o = [p_m, p_p, p_c/2, p_c/2]
     U = jnp.log(jnp.array(P_o))
 
-    # m_rng = range(1, 11)  # comparison based on nu_max
-    m_rng = [1,] + list(range(10, 20))  # comparison based on nu_min
+    m_max = 10
+    m_rng = range(5, 7)  # comparison based on nu_max
+    # m_rng = [1,] + list(range(10, 20))  # comparison based on nu_min
 
     post_smpl = {}
     for m_true in m_rng:
@@ -124,7 +127,7 @@ if __name__ == "__main__":
         priors = []
         params = []
         
-        for m_inf in m_rng:
+        for m_inf in range(1, m_max + 1):
             seq_sim = get_belief_sequence(outcomes_sim, responses_sim, m_inf, cutoff)
             priors.append(seq_sim[0].copy())
             params.append(seq_sim[1].copy())
@@ -136,18 +139,45 @@ if __name__ == "__main__":
                     (
                         np.stack(priors, 0), 
                         np.stack(params, 0), 
-                        outcomes_sim[cutoff:].copy(), 
+                        outcomes_sim[cutoff:], 
                         c0
                     ),
                     device
                 )
+        seqs = lax.stop_gradient(seqs)
+        y = lax.stop_gradient(device_put(responses_sim[cutoff:], device))
+        mask = lax.stop_gradient(device_put(jnp.ones_like(y).astype(bool), device))
 
-        y = device_put(responses_sim[cutoff:].copy(), device)
-        mask = jnp.ones_like(y).astype(bool)
+        conditions = lax.stop_gradient(
+            device_put(jnp.concatenate([jnp.zeros(n, dtype=jnp.int16), jnp.ones(n, dtype=jnp.int16)]), device)
+        )
+        rng_key, _rng_key = device_put(random.split(rng_key), device)
 
-        rng_keys = random.split(rng_key, N)
+        samples = lax.stop_gradient(inference(seqs, y, mask, conditions, _rng_key))
+        for key in samples:
+            print(key, samples[key].shape)
 
-        samples = jit(vmap(inference, in_axes=((2, 2, 1, 0), 1, 1, 0)))(seqs, y, mask, rng_keys)
+        samples = device_put(samples, devices('cpu')[0])
+        seqs = device_put(seqs, devices('cpu')[0])
+        y = device_put(y, devices('cpu')[0])
+        mask = device_put(mask, devices('cpu')[0])
+        conditions = device_put(conditions, devices('cpu')[0])
+
+        log_ll = log_likelihood(
+            complete_mixture_model, samples, seqs, y, mask, conditions, parallel=True, aux=True
+        )['y'].sum(-2)
+
+        r = jnp.stack([samples['r_1'], samples['r_2']], -1)[..., conditions]
+
+        log_prod = log_ll + jnp.log(r)
+        post_marg = nn.softmax(log_prod, -2)
+        exceedance_prob = nn.one_hot(jnp.argmax(post_marg, -2), num_classes=m_max).mean(0)
+
+        print('tau', samples['tau'].mean(), samples['tau'].std())
+        print('rs', samples['r_1'].mean(0), samples['r_2'].mean(0))
+        print('ep', exceedance_prob[:n].mean(-2), exceedance_prob[n:].mean(-2))
+
+        samples['EP'] = exceedance_prob
 
         post_smpl[m_true] = samples
 
@@ -156,8 +186,8 @@ if __name__ == "__main__":
         del seq_sim, samples, agent
 
     # save posterior estimates
-    jnp.savez('fit_sims/sims_mcomp_numin_P-{}-{}-{}-{}.npz'.format(*P_o), samples=post_smpl)
+    # jnp.savez('fit_sims/test_sims_mcomp_numax_P-{}-{}-{}-{}.npz'.format(*P_o), samples=post_smpl)
 
-    # delete tmp files
-    for m_true in m_rng:
-        os.remove('fit_sims/tmp_sims_m{}.npz'.format(m_true))
+    # # delete tmp files
+    # for m_true in m_rng:
+    #     os.remove('fit_sims/tmp_sims_m{}.npz'.format(m_true))

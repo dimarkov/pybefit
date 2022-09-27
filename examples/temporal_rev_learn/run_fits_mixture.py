@@ -7,6 +7,7 @@ from behavioural data under the hierarchical mixture model.
 """
 # set environment for better memory menagment
 import os
+from syslog import LOG_PERROR
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
@@ -14,23 +15,23 @@ os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 import argparse
 import numpyro as npyro
 
-def main(seed, device, dynamic_gamma, dynamic_preference, mc_type):
+def main(seed, device, dynamic_gamma, dynamic_preference):
 
     import jax.numpy as jnp
-    from numpyro.infer import MCMC, NUTS
-    from jax import random, nn, devices, device_put, vmap, jit
+    from numpyro.infer import MCMC, NUTS, log_likelihood
+    from jax import lax, random, nn, devices, device_put
 
     # import utility functions for model inversion and belief estimation
-    from utils import estimate_beliefs, mixture_model
+    from utils import estimate_beliefs, complete_mixture_model
 
     # import data loader
     from stats import load_data
 
-    outcomes_data, responses_data, mask_data, ns, _, _ = load_data()
+    outcomes_data, responses_data, mask_data, _, _, df = load_data()
 
     print(seed, device, dynamic_gamma, dynamic_preference)
 
-    model = lambda *args: mixture_model(*args, dynamic_gamma=dynamic_gamma, dynamic_preference=dynamic_preference)
+    model = complete_mixture_model
 
     m_data = jnp.array(mask_data)
     r_data = jnp.array(responses_data).astype(jnp.int32)
@@ -43,10 +44,7 @@ def main(seed, device, dynamic_gamma, dynamic_preference, mc_type):
     priors = []
     params = []
 
-    if mc_type == 'nu_max':
-        M_rng = list(range(1, 11))  # model comparison for regular condition
-    else:
-        M_rng = [1,] + list(range(11, 20))  # model comparison for irregular condition
+    M_rng = list(range(1, 11))
 
     for M in M_rng:
         if M <= 10:
@@ -68,10 +66,10 @@ def main(seed, device, dynamic_gamma, dynamic_preference, mc_type):
         num_chains = 1
     else:
         num_warmup = 200
-        num_samples = 200
-        num_chains = 5
+        num_samples = 100
+        num_chains = 10
 
-    def inference(belief_sequences, obs, mask, rng_key):
+    def inference(belief_sequences, obs, mask, conditions, rng_key):
         nuts_kernel = NUTS(model, dense_mass=True)
         mcmc = MCMC(
             nuts_kernel, 
@@ -79,14 +77,15 @@ def main(seed, device, dynamic_gamma, dynamic_preference, mc_type):
             num_samples=num_samples, 
             num_chains=num_chains,
             chain_method="vectorized",
-            progress_bar=False
+            progress_bar=True
         )
 
         mcmc.run(
             rng_key, 
             belief_sequences, 
             obs, 
-            mask, 
+            mask,
+            conditions, 
             extra_fields=('potential_energy',)
         )
 
@@ -96,26 +95,48 @@ def main(seed, device, dynamic_gamma, dynamic_preference, mc_type):
 
         return samples, potential_energy
 
-    seqs = device_put(
+    seqs = lax.stop_gradient(
+                device_put(
                     (
                         jnp.stack(priors, 0), 
                         jnp.stack(params, 0), 
                         o_data[cutoff_down:cutoff_up], 
                         c0
                     ), 
-                device)
+                    device
+                )
+            )
 
-    y = device_put(r_data[cutoff_down:cutoff_up], device)
-    mask = device_put(m_data[cutoff_down:cutoff_up].astype(bool), device)
+    y = lax.stop_gradient(device_put(r_data[cutoff_down:cutoff_up], device))
+    mask = lax.stop_gradient(device_put(m_data[cutoff_down:cutoff_up].astype(bool), device))
 
-    n = mask.shape[-1]
-    rng_keys = random.split(rng_key, n)
+    conditions = lax.stop_gradient(
+            device_put( jnp.array((df.condition == 'irregular').values, dtype=jnp.int16), device)
+        )
 
-    samples, potential_energy = jit(vmap(inference, in_axes=((2, 2, 1, 0), 1, 1, 0)))(seqs, y, mask, rng_keys)
+    samples, potential_energy = inference(seqs, y, mask, conditions, rng_key)
 
-    print('potential_energy', potential_energy)     
+    print('potential_energy', potential_energy)
+    samples = device_put(samples, devices('cpu')[0])
+    seqs = device_put(seqs, devices('cpu')[0])
+    y = device_put(y, devices('cpu')[0])
+    mask = device_put(mask, devices('cpu')[0])
+    conditions = device_put(conditions, devices('cpu')[0])
+    log_ll = log_likelihood(
+        model, samples, seqs, y, mask, conditions, parallel=True, aux=True
+    )['y'].sum(-2)
 
-    jnp.savez('fit_data/fit_sample_mixture_gamma{}_pref{}_{}.npz'.format(int(dynamic_gamma), int(dynamic_preference), mc_type), samples=samples)
+    r = jnp.stack([samples['r_1'], samples['r_2']], -1)[..., conditions]
+
+    log_prod = log_ll + jnp.log(r)
+    weights = nn.softmax(log_prod, -2)
+
+    samples['weights'] = weights
+    
+    exceedance_prob = nn.one_hot(jnp.argmax(weights, -2), num_classes=len(M_rng)).mean(0)
+    samples['EP'] = exceedance_prob
+
+    jnp.savez('fit_data/test_fit_sample_mixture_gamma{}_pref{}.npz'.format(int(dynamic_gamma), int(dynamic_preference)), samples=samples)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Model estimates behavioral data")
@@ -123,9 +144,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="cpu", type=str, help='use "cpu" or "gpu".')
     parser.add_argument("-dg", "--dynamic-gamma", action='store_true', help="make gamma parameter dynamic")
     parser.add_argument("-dp", "--dynamic-preference", action='store_true', help="make preference parameters dynamic")
-    parser.add_argument("-mc", "--mc-type", default="nu_max", type=str, help='use "nu_max" or "nu_min".')
     args = parser.parse_args()
 
     npyro.set_platform(args.device)
-    npyro.enable_x64()
-    main(args.seed, args.device, args.dynamic_gamma, args.dynamic_preference, args.mc_type)
+    main(args.seed, args.device, args.dynamic_gamma, args.dynamic_preference)

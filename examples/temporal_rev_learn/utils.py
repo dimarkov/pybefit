@@ -454,3 +454,79 @@ def nondynamic_mixture_model(beliefs, y, mask):
         scan(
             transition_fn, None, jnp.arange(T)
         )
+
+def test_mixture_model(beliefs, y, mask, weights):
+    M, T, N, _ = beliefs[0].shape
+
+    assert weights.shape == (N, M)
+
+    gamma = npyro.sample('gamma', dist.InverseGamma(2., 2.).expand([N]))
+    
+    p = npyro.sample('p', dist.Dirichlet(jnp.ones(3)).expand([N]))
+    
+    p0 = npyro.deterministic('p0', jnp.concatenate([p[..., :1]/2, p[..., :1]/2 + p[..., 1:2], p[..., 2:]/2, p[..., 2:]/2], -1))
+
+    U = jnp.log(p0)
+
+    def transition_fn(carry, t):
+        lgts = logits((beliefs[0][:, t], beliefs[1][:, t]), jnp.expand_dims(gamma, -1), jnp.expand_dims(U, -2))
+
+        mixing_dist = dist.CategoricalProbs(weights)
+        component_dist = dist.CategoricalLogits(lgts.swapaxes(1, 0)).mask(mask[t, :, None])
+        with npyro.plate('subject', N):
+            npyro.sample('y', dist.MixtureSameFamily(mixing_dist, component_dist))
+
+        return None, None
+
+    with npyro.handlers.condition(data={"y": y}):
+        scan(
+            transition_fn, None, jnp.arange(T)
+        )
+
+def aux_mixture_model(beliefs, y, mask, weights):
+    M, T, N, _ = beliefs[0].shape
+
+    assert weights.shape == (N, M)
+
+    gamma = npyro.sample('gamma', dist.InverseGamma(2., 2.).expand([N]))
+    
+    p = npyro.sample('p', dist.Dirichlet(jnp.ones(3)).expand([N]))
+    
+    p0 = npyro.deterministic(
+        'p0', 
+        jnp.concatenate(
+            [p[..., :1]/2, 
+            p[..., :1]/2 + p[..., 1:2], 
+            p[..., 2:]/2, 
+            p[..., 2:]/2], 
+            -1
+        )
+    )
+
+    U = jnp.log(p0)
+
+    lgts = logits(
+        (beliefs[0], beliefs[1]),
+        jnp.expand_dims(gamma, -1),
+        jnp.expand_dims(U, -2)
+    )
+
+    cat_dist = dist.CategoricalLogits(lgts).mask(mask)
+
+    with npyro.plate('subject', N):
+        with npyro.plate('step', T):
+            with npyro.plate('model', M):
+                npyro.sample('y', cat_dist, obs=y)
+
+def complete_mixture_model(beliefs, y, mask, condition, aux=False):
+    M, T, N, _ = beliefs[0].shape
+    
+    tau = npyro.sample('tau', dist.HalfCauchy(1.))
+    r_1 = npyro.sample('r_1', dist.Dirichlet(jnp.ones(M)/tau))
+    r_2 = npyro.sample('r_2', dist.Dirichlet(jnp.ones(M)/tau))
+    
+    weights = jnp.stack([r_1, r_2], 0)[condition]
+    if aux:
+        aux_mixture_model(beliefs, y, mask, weights)
+    else:
+        test_mixture_model(beliefs, y, mask, weights)
