@@ -16,14 +16,14 @@ python run_sims.py -n 50 --device gpu
 # Citing
 If you use the code or availible behavioural data please consider citing our paper:
 ```
-@article{markovic2022temp,
-title = {Revealing human sensitivity to a latent temporal structure of changes},
-journal = {Frontiers in Behavioural Neuroscience},
-year = {2022},
-issn = {},
-doi = {https://doi.org/10.3389/fnbeh.2022.962494},
-url = {},
-author = {Dimitrije Marković and Andrea M.F. Reiter and Stefan J. Kiebel},
-keywords = {Decision making, Bayesian inference, Multi-armed bandits, Reversal learning task, Active inference}
+@ARTICLE{markovic2022temprl,
+AUTHOR={Marković, Dimitrije and Reiter, Andrea M. F. and Kiebel, Stefan J.},    
+TITLE={Revealing human sensitivity to a latent temporal structure of changes},      
+JOURNAL={Frontiers in Behavioral Neuroscience},      
+VOLUME={16},           
+YEAR={2022},      
+URL={https://www.frontiersin.org/articles/10.3389/fnbeh.2022.962494},       
+DOI={10.3389/fnbeh.2022.962494},      
+ISSN={1662-5153},   
 }
 ``` 
