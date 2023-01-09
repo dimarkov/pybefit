@@ -16,36 +16,43 @@ package_data = \
 {'': ['*']}
 
 install_requires = \
-['jax>=0.3.3',
- 'jaxlib>=0.3.2',
- 'jupyter>=1.0.0',
- 'jupyterthemes>=0.20.0',
- 'matplotlib>=3.5.1',
- 'numpy>=1.22.1',
- 'numpyro>=0.9.1',
- 'pandas>=1.4.0',
- 'pycm>=3.4',
- 'pyro-ppl>=1.8.0',
- 'seaborn>=0.11.2',
- 'torch>=1.11.0']
+['jax',
+ 'numpy',
+ 'numpyro',
+ 'optax',
+ 'torch'
+ 'pyro-ppl',
+ 'pandas',
+ 'pycm',
+ 'seaborn',
+ 'matplotlib',
+ 'arviz']
+
+classifiers = \
+[
+    'Development Status :: 3 - Alpha',
+    'Intended Audience :: Developers',
+    'Intended Audience :: Science/Research',
+    'Topic :: Scientific/Engineering',
+    'License :: OSI Approved :: MIT License',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10'
+]
 
 setup_kwargs = {
     'name': 'pybefit',
-    'version': '0.2.0',
-    'description': 'PyBefit is a Python library for Bayesian analysis of behavioral data.',
-    'long_description': None,
+    'version': '0.1.12',
+    'description': 'Probabilistic inference for models of behaviour',
+    'long_description': 'PyBefit is a Python library for Bayesian analysis of behavioral data. It is based on Pyro/Numpyro a probabilistic programing language, PyTorch, and Jax machine learning libraries.',
     'author': 'Dimitrije Markovic',
     'author_email': 'dimitrije.markovic@tu-dresden.de',
-    'maintainer': None,
-    'maintainer_email': None,
-    'url': None,
+    'url': 'https://github.com/dimarkov/pybefit',
     'package_dir': package_dir,
     'packages': packages,
     'package_data': package_data,
     'install_requires': install_requires,
     'python_requires': '>=3.9,<3.11',
 }
-
 
 setup(**setup_kwargs)
 

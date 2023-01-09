@@ -7,3 +7,5 @@ __pycache__
 *.png
 *.npz
 .vscode
+dist
+src/pybefit.egg-info/

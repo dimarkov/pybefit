@@ -17,39 +17,29 @@ Requirements
 
 Installation
 ------------
-
-### Poetry
-The easiest way to install required libraries and the PyBefit package is using [poetry](https://python-poetry.org/) package manager. Inside the project root directory run 
+To install PyBefit with CPU-only versions of JAX and PyTorch you can run
 ```sh
-poetry install
-poetry shell
+pip install pip --upgrade
+pip install pybefit --upgrade
 ```
-
-If cuda support required for your work, simply run the following commands
+### Conda installation
+To install either JAX or Pytorch with Nvidia GPU support we recomment using [anaconda](https://conda.io/miniconda.html) package manager. First create pybefit environment and activate it
 ```sh
-poetry run pip install pip --upgrade
-poetry run poe force-cuda11-torch
-poetry run poe force-cuda11-jax
-```
-This will upgrade pytorch and jax to the versions with the support for the latest cuda version.
-
-### Anaconda
-If you prefer [anaconda](https://conda.io/miniconda.html) install pybefit using the following steps 
-```sh
-conda create -n befit python=3.10 jupyterlab matplotlib seaborn pandas jax cuda-nvcc pytorch torchvision torchaudio cudatoolkit=11.6 -c pytorch -c conda-forge -c nvidia
-```
-for cuda support or 
-```sh
-conda create -n befit python=3.10 jupyterlab matplotlib seaborn pandas pytorch torchvision torchaudio cpuonly -c pytorch
-```
-for cpu only version of pytorch and jax. 
-
-Next activate the environment
-```sh
+conda create -n befit python=3.10
 conda activate befit
 ```
-and install pybefit by running the following from the root of the pybefit directory
+Then follow instructions for installing [JAX](https://github.com/google/jax#installation) or [Pytorch](https://pytorch.org/) with GPU support.
+
+Finally install pybefit via pip within the conda environment
 ```sh
+pip install pip --upgrade
+pip install pybefit --upgrade
+```
+
+For development you can install pybefit directly from repo as follows
+```sh
+git clone https://github.com/dimarkov/pybefit.git
+cd pybefit
 pip install pip --upgrade
 pip install -e .
 ```
