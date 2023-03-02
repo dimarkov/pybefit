@@ -25,7 +25,7 @@ def evolve_trials(agent, data):
 
     return res
 
-def pymdp_likelihood(agent, stimulus=None, Nb=1, Nt=1, Na=1):
+def pymdp_likelihood(agent, data=None, num_blocks=1, num_trials=1, num_agents=1):
     # Na -> batch dimension - number of different subjects/agents
     # Nb -> number of experimental blocks
     # Nt -> number of trials within each block
@@ -36,8 +36,8 @@ def pymdp_likelihood(agent, stimulus=None, Nb=1, Nt=1, Na=1):
 
         deterministic('outcomes', outcomes)
 
-        with plate('num_agents', Na):
-            with plate('num_trials', Nt):
+        with plate('num_agents', num_agents):
+            with plate('num_trials', num_trials):
                 sample('actions', dist.Categorical(logits=probs).to_event(1), obs=actions)
         
         # TODO: update agent parameters - learning
@@ -45,4 +45,4 @@ def pymdp_likelihood(agent, stimulus=None, Nb=1, Nt=1, Na=1):
         return agent, None
     
     init_agent = agent
-    scan(step_fn, init_agent, stimulus, length=Nb)
+    scan(step_fn, init_agent, data, length=num_blocks)

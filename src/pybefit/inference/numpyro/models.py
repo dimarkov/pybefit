@@ -5,7 +5,7 @@ class NumpyroModel(object):
     prior: Callable
     transform: Callable
     likelihood: Callable
-    opts: Optional[Dict] = {'priors': {}, 'transform': {}, 'likelihood': {}}
+    opts: Optional[Dict] = {'prior': {}, 'transform': {}, 'likelihood': {}}
 
     def __init__(self, prior, transform, likelihood, opts=None) -> None:
         self.prior = prior
@@ -14,10 +14,10 @@ class NumpyroModel(object):
         if opts is not None:
             self.opts = opts
 
-    def __call__(self, stimulus):
+    def __call__(self, data=None):
         z = self.prior(**self.opts['prior'])
         agent = self.transform(z, **self.opts['transform'])
-        self.likelihood(agent, stimulus=stimulus, **self.opts['likelihood'])
+        self.likelihood(agent, data=data, **self.opts['likelihood'])
 
 class NumpyroGuide:
     
@@ -26,5 +26,5 @@ class NumpyroGuide:
     def __init__(self, guide) -> None:
         self.guide = guide
 
-    def __call__(self, stimulus):
-        self.guide(stimulus)
+    def __call__(self, data=None):
+        self.guide(data)

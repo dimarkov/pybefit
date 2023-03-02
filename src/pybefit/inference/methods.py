@@ -13,7 +13,7 @@ import optax
 from numpyro.optim import optax_to_numpyro
 
 from multipledispatch import dispatch
-from typing import Dict
+from typing import Dict, Any
 
 from tqdm.auto import tqdm
 
@@ -32,7 +32,7 @@ __all__ = [
 ]
 
 # Pyro/Pytorch based models
-@dispatch(PyroModel, PyroGuide, opts=Dict)
+@dispatch(PyroModel, PyroGuide, opts=dict)
 def run_svi(model,
             guide,
             *,
@@ -94,7 +94,7 @@ def run_svi(model,
     return samples, svi, results
 
 
-@dispatch(PyroModel, opts=Dict)
+@dispatch(PyroModel, opts=dict)
 def run_nuts(
     model,
     *,
@@ -122,40 +122,44 @@ def run_nuts(
 
     return samples, mcmc
 
+
+default_dict_numpyro_svi = dict(
+    seed=0,
+    enumerate=False,            
+    iter_steps=10000,
+    optim=None,
+    optim_kwargs={'learning_rate': 1e-3},
+    elbo_kwargs=dict(
+        num_particles=10,
+        max_plate_nesting=1,
+    ),
+    svi_kwargs=dict(
+        progress_bar=True,
+        stable_update=True
+    ),
+    sample_kwargs=dict(
+        num_samples=100
+    )
+)
+
 # Numpyro/Jax based models
-@dispatch(NumpyroModel, NumpyroGuide, opts=Dict)
+@dispatch(NumpyroModel, NumpyroGuide, dict, opts=dict)
 def run_svi(model,
             guide,
+            data,
             *,
-            opts=dict(
-                seed=0,
-                enumerate=False,            
-                iter_steps=10000,
-                optim=None,
-                optim_kwargs={'learning_rate': 1e-3},
-                elbo_kwargs=dict(
-                    num_particles=10,
-                    max_plate_nesting=float("inf"),
-                ),
-                svi_kwargs=dict(
-                    progress_bar=True,
-                    stable_update=True
-                ),
-                sample_kwargs=dict(
-                    num_samples=100
-                )
-            )
+            opts=default_dict_numpyro_svi
         ):
     """Estimate posterior over free model parameters using stochastic variational inference.
     """
     rng_key = jr.PRNGKey(opts['seed'])
 
-    if enumerate:
+    if opts['enumerate']:
         elbo = ninfer.TraceEnum_ELBO(**opts['elbo_kwargs'])
     else:
         elbo = ninfer.TraceGraph_ELBO(num_particles=opts['elbo_kwargs']['num_particles'])
     
-    if opts['optims'] is None:
+    if opts['optim'] is None:
         optim = optax_to_numpyro(adabelief(**opts['optim_kwargs']))
     else:
         optim = optim
@@ -165,29 +169,32 @@ def run_svi(model,
     results = svi.run(
         _rng_key,
         opts['iter_steps'],
+        data=data,
         **opts['svi_kwargs']
     )
 
     rng_key, _rng_key = jr.split(opts['rng_key'])
     pred = ninfer.Predictive(model, guide=guide, params=results.params, **opts['sample_kwargs'])
-    samples = pred(_rng_key)
+    samples = pred(_rng_key, data=data)
 
     return samples, svi, results
 
+default_dict_numpyro_nuts = dict(
+    seed=0,
+    num_samples=1000,            
+    num_warmup=100,
+    sampler_kwargs={
+        'kernel': {}, 
+        'mcmc': dict(progress_bar=True)
+    }
+)
 
-@dispatch(NumpyroModel, opts=Dict)
+@dispatch(NumpyroModel, dict, opts=dict)
 def run_nuts(
     model,
+    data,
     *,
-    opts=dict(
-        seed=0,
-        num_samples=1000,            
-        num_warmup=100,
-        sampler_kwargs={
-            'kernel': {}, 
-            'mcmc': dict(progress_bar=True)
-        }
-    )
+    opts=default_dict_numpyro_nuts
 ):
     """Estimate posterior over free model parameters using No-U-Turn sampler.
     """
@@ -202,7 +209,7 @@ def run_nuts(
     )
 
     rng_key, _rng_key = jr.split(rng_key)
-    mcmc.run(_rng_key)
+    mcmc.run(_rng_key, data=data)
     samples = mcmc.get_samples()
 
     return samples, mcmc

@@ -31,7 +31,6 @@ finally:
         pass
 
 
-
 class Prior(object):
     num_params: int  # number of free model parameters
     num_agents: int  # number of independent agents/subjects performing the experiment
@@ -132,6 +131,7 @@ class NormalGamma(Prior):
         assert z.shape == (na, np)
 
         return z
+
 
 class RegularisedHorseshoe(Prior):
     """Regularised horseshoe prior over free model parameters. For details see: Piironen, Juho, and Aki Vehtari. "Sparsity information and regularization in the horseshoe and other shrinkage priors." (2017): 5018-5051.
