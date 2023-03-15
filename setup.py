@@ -27,6 +27,7 @@ install_requires = \
  'seaborn',
  'matplotlib',
  'arviz',
+ 'jupyterthemes',
  'jupyter-black']
 
 classifiers = \
