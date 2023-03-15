@@ -43,7 +43,7 @@ for k in range(blocks):
     
     offs = [off]
     for t in range(1, trials):
-        offs.append(Categorical(probs=pr_coo[cnt, offs[-1]]).sample())
+        offs.append(Categorical(probs=pr_coo1[cnt, offs[-1]]).sample())
     
     offs = torch.stack(offs)
     
