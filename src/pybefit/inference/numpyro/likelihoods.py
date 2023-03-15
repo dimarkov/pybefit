@@ -38,7 +38,7 @@ def pymdp_likelihood(agent, data=None, num_blocks=1, num_trials=1, num_agents=1)
 
         with plate('num_agents', num_agents):
             with plate('num_trials', num_trials):
-                sample('actions', dist.Categorical(logits=probs).to_event(1), obs=actions)
+                sample('actions', dist.Categorical(probs=probs).to_event(1), obs=actions)
         
         # TODO: update agent parameters - learning
 
