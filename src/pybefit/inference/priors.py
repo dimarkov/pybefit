@@ -149,8 +149,8 @@ class RegularisedHorseshoe(Prior):
         
         # define prior uncertanty over model parameters
         c_sqr_inv = self.sample('c^{-2}', self.dist.Gamma(2, 2))
-        u = self.sample('u', self.dist.Gamma(self.tensor.ones(np + 1)).to_event(1))
-        v = self.sample('v', self.dist.Gamma(self.tensor.ones(np + 1)).to_event(1))
+        u = self.sample('u', self.dist.Gamma(self.tensor.ones(np + 1)/2).to_event(1))
+        v = self.sample('v', self.dist.Gamma(self.tensor.ones(np + 1)/2).to_event(1))
 
         psi = u[-1] * u[:-1]
         ksi = v[-1] * v[:-1]

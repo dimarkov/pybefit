@@ -9,6 +9,7 @@ import numpyro.infer as ninfer
 import jax.random as jr
 
 import optax
+import numpy as np
 
 from numpyro.optim import optax_to_numpyro
 
@@ -169,11 +170,13 @@ def run_svi(model,
     results = svi.run(
         _rng_key,
         opts['iter_steps'],
-        data=data,
-        **opts['svi_kwargs']
+        progress_bar=opts['svi_kwargs']['progress_bar'],
+        stable_update=opts['svi_kwargs']['stable_update'],
+        init_state = opts['svi_kwargs'].pop('init_state', None),
+        data=data
     )
 
-    rng_key, _rng_key = jr.split(opts['rng_key'])
+    rng_key, _rng_key = jr.split(rng_key)
     pred = ninfer.Predictive(model, guide=guide, params=results.params, **opts['sample_kwargs'])
     samples = pred(_rng_key, data=data)
 
