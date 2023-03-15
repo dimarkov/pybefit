@@ -26,7 +26,8 @@ install_requires = \
  'pycm',
  'seaborn',
  'matplotlib',
- 'arviz']
+ 'arviz',
+ 'jupyter-black']
 
 classifiers = \
 [
