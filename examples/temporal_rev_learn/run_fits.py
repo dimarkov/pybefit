@@ -7,7 +7,6 @@ from behavioural data under the hierarchical mixture model.
 """
 # set environment for better memory menagment
 import os
-from syslog import LOG_PERROR
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 

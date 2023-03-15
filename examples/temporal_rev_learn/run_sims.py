@@ -17,10 +17,10 @@ import jax.numpy as jnp
 
 import numpyro as npyro
 
-from pybefit.agents import HSMMAI as Agent
+from pybefit.agents.jax.hsmm_ai import HSMMAI as Agent
 from utils import estimate_beliefs, simulator, complete_mixture_model
-from jax import lax, random, devices, device_put, nn, jit, vmap
-from numpyro.infer import MCMC, NUTS, log_likelihood, Predictive
+from jax import lax, random, devices, device_put, nn
+from numpyro.infer import MCMC, NUTS, log_likelihood
 from scipy import io
 
 def get_belief_sequence(outcomes, responses, m_inf, cutoff):

@@ -15,8 +15,8 @@ from numpyro.distributions import TransformedDistribution, transforms
 from opt_einsum import contract
 from numpyro.contrib.control_flow import scan
 
-from pybefit.agents import HSMMAI as  Agent 
-from pybefit.agents import logits
+from pybefit.agents.jax.hsmm_ai import HSMMAI as  Agent 
+from pybefit.agents.jax.hsmm_ai import logits
 
 def einsum(equation, *args):
     return contract(equation, *args, backend='jax')
