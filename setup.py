@@ -37,7 +37,6 @@ classifiers = \
     'Intended Audience :: Science/Research',
     'Topic :: Scientific/Engineering',
     'License :: OSI Approved :: MIT License',
-    'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10'
 ]
 
@@ -46,14 +45,14 @@ setup_kwargs = {
     'version': '0.1.0',
     'description': 'Probabilistic inference for models of behaviour',
     'long_description': 'PyBefit is a Python library for Bayesian analysis of behavioral data. It is based on Pyro/Numpyro a probabilistic programing language, PyTorch, and Jax machine learning libraries.',
-    'author': 'Dimitrije Markovic',
+    'author': 'Dimitrije Marković',
     'author_email': 'dimitrije.markovic@tu-dresden.de',
     'url': 'https://github.com/dimarkov/pybefit',
     'package_dir': package_dir,
     'packages': packages,
     'package_data': package_data,
     'install_requires': install_requires,
-    'python_requires': '>=3.9,<3.11',
+    'python_requires': '>=3.10',
 }
 
 setup(**setup_kwargs)
