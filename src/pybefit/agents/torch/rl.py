@@ -11,7 +11,7 @@ import torch
 from torch import ones, zeros, zeros_like, arange
 from torch.distributions import Categorical
 
-from ..agent import Discrete
+from ..base import Discrete
 
 __all__ = [
         'RLSocInf',
@@ -21,7 +21,7 @@ __all__ = [
 softplus = torch.nn.Softplus()
 
 class RLSocInf(Discrete):
-    """Reiforcement learning agent (using Rescorla-Wagner learning rule) for 
+    """Reinforcement learning agent (using Rescorla-Wagner learning rule) for 
     the Social Influence task.
     """
 

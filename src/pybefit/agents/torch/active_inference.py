@@ -9,7 +9,7 @@ This module contains active inference agents for various experimental tasks.
 """
 
 import torch
-from torch import zeros, ones, tensor, eye
+from torch import zeros, ones, eye
 
 from torch.distributions import Categorical
 
@@ -17,7 +17,7 @@ from numpy import nan_to_num
 
 from itertools import product
 
-from ..agent import Discrete
+from ..base import Discrete
 
 __all__ = [
         'AIBandits',

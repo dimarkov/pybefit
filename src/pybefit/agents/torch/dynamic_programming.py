@@ -18,7 +18,7 @@ from numpy import nan, ravel_multi_index
 
 from itertools import product
 
-from ..agent import Discrete
+from ..base import Discrete
 
 __all__ = [
         'BIBanditsFlat',

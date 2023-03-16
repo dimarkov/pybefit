@@ -10,56 +10,60 @@ import jax.random as jr
 
 import optax
 import numpy as np
+import pandas as pd
 
 from numpyro.optim import optax_to_numpyro
 
 from multipledispatch import dispatch
 from typing import Dict, Any
 
-from tqdm.auto import tqdm
+from tqdm.auto import trange
 
 from pyro import clear_param_store, get_param_store
 
 from pyro.optim import Adam
 
-from .numpyro.models import NumpyroModel, NumpyroGuide
-from .pyro.models import PyroModel, PyroGuide
+from .models import NumpyroModel, NumpyroGuide, PyroModel, PyroGuide
 
 adabelief = lambda *args, **kwargs: optax.adabelief(*args, eps=1e-8, eps_root=1e-8, **kwargs)
 
 __all__ = [
     'run_svi',
-    'run_nuts'
+    'run_nuts',
+    'format_posterior_samples'
 ]
 
+default_dict_pyro_svi = dict(
+    enumerate=False,            
+    iter_steps=10000,
+    optim_kwargs={'lr': 1e-3},
+    elbo_kwargs=dict(
+        num_particles=10,
+        vectorize_particles=True
+    ),
+    svi_kwargs=dict(
+        progress_bar=True,
+        stable_update=True
+    ),
+    sample_kwargs=dict(
+        num_samples=100
+    )
+)
+
 # Pyro/Pytorch based models
-@dispatch(PyroModel, PyroGuide, opts=dict)
+@dispatch(PyroModel, PyroGuide, dict, opts=dict)
 def run_svi(model,
             guide,
+            data,
             *,
-            opts=dict(
-                enumerate=False,            
-                iter_steps=10000,
-                optim_kwargs={'lr': 1e-3},
-                elbo_kwargs=dict(
-                    num_particles=10,
-                    vectorize_particles=True
-                ),
-                svi_kwargs=dict(
-                    progress_bar=True,
-                    stable_update=True
-                ),
-                sample_kwargs=dict(
-                    num_samples=100
-                )
-            )
+            opts=default_dict_pyro_svi
         ):
     """Perform SVI over free model parameters.
     """
 
     clear_param_store()
 
-    if enumerate:
+    if opts['enumerate']:
         elbo = pinfer.TraceEnum_ELBO(**opts['elbo_kwargs'])
     else:
         elbo = pinfer.Trace_ELBO(**opts['elbo_kwargs'])
@@ -72,12 +76,13 @@ def run_svi(model,
     )
 
     loss = []
-    pbar = tqdm(range(opts['iter_steps']), position=0)
+    pbar = trange(opts['iter_steps'], position=0)
     for _ in pbar:
-        loss.append(svi.step())
+        loss.append(svi.step(data))
         pbar.set_description("Mean ELBO %6.2f" % np.mean(loss[-20:]))
         if np.isnan(loss[-1]):
             break
+            print('loss returned NAN value')
 
     param_store = get_param_store()
     params = {}
@@ -90,7 +95,7 @@ def run_svi(model,
     }
 
     pred = pinfer.Predictive(model, guide=guide, **opts['sample_kwargs'])
-    samples = pred()
+    samples = pred(data)
 
     return samples, svi, results
 
@@ -297,43 +302,28 @@ def run_nuts(
 #         self.loss = loss
 #         self.elbo = elbo
 
-#     def sample_posterior(self, labels, num_samples=1000):
-#         """Generate samples from posterior distribution.
-#         """
-#         nsub = self.runs
-#         npar = self.npar
-#         assert npar == len(labels)
+def format_posterior_samples(labels, samples, transform, *args, **kwargs):
+    """Format samples into DataFrames based on agent transform
+    """
 
-#         sites = ['sigma', 'mu', 'locs']
-#         predict = Predictive(self.model, guide=self.guide, num_samples=num_samples, return_sites=sites, parallel=True)
-#         samples = predict()
+    num_samples, num_agents, num_params = samples['z'].shape
+    assert num_params == len(labels)
 
-#         subject_id = torch.arange(1, nsub+1).repeat(num_samples, 1).reshape(-1)
-#         trans_pars_df = pd.DataFrame(data=samples['locs'].detach().reshape(-1, npar).numpy(), columns=labels)
-#         trans_pars_df['subject'] = subject_id.numpy()
+    subject_id = np.arange(1,  num_agents + 1)[None].repeat(num_samples, axis=0).reshape(-1)
 
-#         locs = samples['locs'].detach()
-#         if self.fixed_values:
-#             x = zeros(locs.shape[:-1] + (self.agent.npar,))
-#             x[..., self.locs['fixed']] = self.values
-#             x[..., self.locs['free']] = locs
-#         else:
-#             x = locs
+    agent = transform(samples['z'], *args, **kwargs)
 
-#         self.agent.set_parameters(x)
-#         pars = []
-#         for lab in labels:
-#             pars.append(getattr(self.agent, lab[2:-1]).reshape(-1).numpy())
-#         pars_df = pd.DataFrame(data=np.stack(pars, -1), columns=labels)
-#         pars_df['subject'] = subject_id.numpy()
+    pars = []
+    for lab in labels:
+        pars.append(getattr(agent, lab).reshape(-1).numpy())
+        
+    pars_df = pd.DataFrame(data=np.stack(pars, -1), columns=labels)
+    pars_df['subject'] = subject_id
 
-#         mu = np.take(samples['mu'].detach().numpy(), 0, axis=-2)
-#         sigma = np.take(samples['sigma'].detach().numpy(), 0, axis=-2)
+    trans_pars_df = pd.DataFrame(data=samples['z'].reshape(-1, num_params), columns=labels)
+    trans_pars_df['subject'] = subject_id
 
-#         mu_df = pd.DataFrame(data=mu, columns=labels)
-#         sigma_df = pd.DataFrame(data=sigma, columns=labels)
-
-#         return (trans_pars_df, pars_df, mu_df, sigma_df)
+    return trans_pars_df, pars_df
 
 
 #     def sample_posterior_marginal(self, n_samples=100):
