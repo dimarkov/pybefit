@@ -15,7 +15,6 @@ import pandas as pd
 from numpyro.optim import optax_to_numpyro
 
 from multipledispatch import dispatch
-from typing import Dict, Any
 
 from tqdm.auto import trange
 
@@ -222,86 +221,6 @@ def run_nuts(
 
     return samples, mcmc
 
-# class Inferrer(object):
-
-#     def __init__(self, agent, stimulus, responses, mask=None, fixed_params=None, enumerate=False):
-
-#         self.agent = agent  # agent used for computing response probabilities
-#         self.stimulus = stimulus  # stimulus and action outcomes presented to each participant
-#         self.responses = responses  # measured behavioral data accross all subjects
-#         self.nb, self.nt, self.runs = self.responses.shape
-
-#         # set a mask for excluding certain responses (e.g. NaN resonses) from
-#         # the computations of the log-model evidence and the posterior beliefs over
-#         # parameter values
-#         if mask is not None:
-#             self.notnans = mask
-#         else:
-#             self.notnans = ones(self.nb, self.nt, self.runs, dtype=torch.bool)
-
-#         if fixed_params is not None:
-#             n_fixed = len(fixed_params['labels'])
-#             self.npar = agent.npar - n_fixed
-
-#             self.locs = {}
-#             self.locs['fixed'] = fixed_params['labels']
-#             self.locs['free'] = list(set(range(agent.npar)) - set(fixed_params['labels']))
-#             self.values = fixed_params['values']
-#             self.fixed_values = True
-#         else:
-#             self.npar = agent.npar
-#             self.fixed_values = False
-
-#         self.enumerate = enumerate
-
-#     def model(self):
-#         """
-#         Full generative model of behavior.
-#         """
-#         raise NotImplementedError
-
-#     def guide(self):
-#         """Approximate posterior over model parameters.
-#         """
-#         raise NotImplementedError
-
-#     def infer_posterior(self,
-#                         iter_steps=10000,
-#                         num_particles=100,
-#                         optim_kwargs={'lr': .01}):
-#         """Perform SVI over free model parameters.
-#         """
-
-#         clear_param_store()
-
-#         model = self.model
-#         guide = self.guide
-#         if self.enumerate:
-#             elbo = TraceEnum_ELBO(num_particles=num_particles, vectorize_particles=True)
-#         else:
-#             elbo = Trace_ELBO(num_particles=num_particles, vectorize_particles=True)
-#         svi = SVI(model=model,
-#                   guide=guide,
-#                   optim=Adam(optim_kwargs),
-#                   loss=elbo)
-
-#         loss = []
-#         pbar = tqdm(range(iter_steps), position=0)
-#         for step in pbar:
-#             loss.append(svi.step())
-#             pbar.set_description("Mean ELBO %6.2f" % np.mean(loss[-20:]))
-#             if np.isnan(loss[-1]):
-#                 break
-
-#         param_store = get_param_store()
-#         parameters = {}
-#         for name in param_store.get_all_param_names():
-#             parameters[name] = param(name)
-
-#         self.parameters = parameters
-#         self.loss = loss
-#         self.elbo = elbo
-
 def format_posterior_samples(labels, samples, transform, *args, **kwargs):
     """Format samples into DataFrames based on agent transform
     """
@@ -315,7 +234,7 @@ def format_posterior_samples(labels, samples, transform, *args, **kwargs):
 
     pars = []
     for lab in labels:
-        pars.append(getattr(agent, lab).reshape(-1).numpy())
+        pars.append(np.array(getattr(agent, lab).reshape(-1)))
         
     pars_df = pd.DataFrame(data=np.stack(pars, -1), columns=labels)
     pars_df['subject'] = subject_id
@@ -413,23 +332,25 @@ def format_posterior_samples(labels, samples, transform, *args, **kwargs):
 
 #         return df_percentiles.melt(id_vars=['subjects', 'variables'], var_name='parameter')
 
-#     def get_log_evidence_per_subject(self, *args, num_particles=100, max_plate_nesting=1, **kwargs):
-#         """Return subject specific log model evidence"""
+import torch
 
-#         model = self.model
-#         guide = self.guide
+def get_log_evidence_per_subject(svi, num_agents, *args, num_particles=100, max_plate_nesting=1, **kwargs):
+    """Return subject specific log model evidence"""
 
-#         elbo = zeros(self.runs)
-#         for i in range(num_particles):
-#             model_trace, guide_trace = get_importance_trace('flat', max_plate_nesting, model, guide, args, kwargs)
-#             for site in model_trace.nodes.values():
-#                 if site['name'].startswith('obs'):
-#                     elbo += site['log_prob'].detach()
-#                 elif site['name'] == 'locs':
-#                     elbo += site['log_prob'].detach()
+    model = svi.model
+    guide = svi.guide
 
-#             for site in guide_trace.nodes.values():
-#                 if site['name'] == 'locs':
-#                     elbo -= site['log_prob'].detach()
+    elbo = torch.zeros(num_agents)
+    for i in range(num_particles):
+        model_trace, guide_trace = pyro.infer.enum.get_importance_trace('flat', max_plate_nesting, model, guide, args, kwargs)
+        for site in model_trace.nodes.values():
+            if site['name'].startswith('obs'):
+                elbo += site['log_prob'].detach()
+            elif site['name'] == 'locs':
+                elbo += site['log_prob'].detach()
 
-#         return elbo/num_particles
+        for site in guide_trace.nodes.values():
+            if site['name'] == 'locs':
+                elbo -= site['log_prob'].detach()
+
+    return elbo/num_particles
