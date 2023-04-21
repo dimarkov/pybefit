@@ -16,8 +16,8 @@ class Simulator(object):
         self.nt = trials  # number of trials in each mini-block
 
         # container for agents responses
-        self.responses = zeros(self.runs, self.nb, self.nt)-1
-        self.outcomes = zeros(self.runs, self.nb, self.nt, dtype=long)-1
+        self.responses = zeros(self.runs, self.nb, self.nt) - 1
+        self.outcomes = zeros(self.runs, self.nb, self.nt, dtype=long) - 1
 
     def simulate_experiment(self):
         """Simulates the experiment by iterating through all the mini-blocks and trials,
@@ -34,7 +34,7 @@ class Simulator(object):
                 if t == 0:
                     self.agent.update_beliefs(b, t, states, conditions)
                 else:
-                    self.agent.update_beliefs(b, t, states, conditions, self.responses[:, b, t-1])
+                    self.agent.update_beliefs(b, t, states, conditions, self.responses[:, b, t - 1])
 
                 if t < self.nt:
                     self.agent.plan_actions(b, t)
