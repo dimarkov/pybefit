@@ -42,7 +42,7 @@ classifiers = \
 
 setup_kwargs = {
     'name': 'pybefit',
-    'version': '0.1.1',
+    'version': '0.1.2',
     'description': 'Probabilistic inference for models of behaviour',
     'long_description': 'PyBefit is a Python library for Bayesian analysis of behavioral data. It is based on Pyro/Numpyro a probabilistic programing language, PyTorch, and Jax machine learning libraries.',
     'author': 'Dimitrije Marković',
