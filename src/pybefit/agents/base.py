@@ -12,17 +12,23 @@ __all__ = [
 ]
 
 class Discrete(object):
-    """Agent with discrete number of actions.
+    """Agent with discrete and finite number of actions.
     """
     def __init__(self, runs, blocks, trials, na, ns, no):
         
-        self.runs = runs
-        self.nb = blocks
-        self.nt = trials
+        self.runs = runs  # number of independent runs of the experiment or agents/subjects
+        self.nb = blocks  # number of experimental blocks
+        self.nt = trials  # number of trials in each block
         
         self.na = na  # number of actions
         self.ns = ns  # number of states
-        self.no = no  # number of outcomes        
+        self.no = no  # number of outcomes
+
+    @property
+    def num_params(self):
+        """Return the number of model parameters
+        """
+        raise NotImplementedError        
         
     def set_parameters(self, *args, **kwargs):
         """Set free model parameters.
@@ -45,9 +51,8 @@ class Discrete(object):
         raise NotImplementedError
 
 
-
 class Continous(Discrete):
-    """Agent with continous number of actions.
+    """Agent with continous actions.
     """
     def __init__(self, runs, blocks, trials, ns, no):
         super(Continous, self).__init__(runs, blocks, trials, -1, ns, no)
