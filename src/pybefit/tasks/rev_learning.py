@@ -4,8 +4,6 @@
 This module contains various experimental environments used for testing
 human behavior.
 
-Created on Thu Feb  22 14:50:01 2018
-
 @author: Dimitrije Markovic
 """
 
