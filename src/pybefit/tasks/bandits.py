@@ -11,36 +11,33 @@ Created on Thu Feb  22 14:50:01 2018
 import torch
 from torch import zeros, ones
 from torch.distributions import Categorical, Multinomial, Dirichlet
+from .base import Task
 
 __all__ = [
         'MultiArmedBandit'
 ]
 
-class MultiArmedBandit(object):
+class MultiArmedBandit(Task):
     """Implementation of a multi-armed bandit task. Bandit has K arms, each associated 
        with specific probability of delivering different outcomes.
     """
     
-    def __init__(self, priors, transitions, context, offers, arm_types, states=None, nsub=1, blocks=1, trials=100):
+    def __init__(self, priors, transitions, offers, arm_types, states=None, nsub=1, blocks=1, trials=100):
+
+        super().__init__(nsub, blocks, trials)
         
         self.priors = priors  # prior probabilities
-        self.tms = transitions  # dictionary containing tranistion matrices
-        
-        self.blocks = blocks
-        self.trials = trials
-        self.nsub = nsub
+        self.tms = transitions  # dictionary containing transition matrices
         
         if states is not None:
-            self.states = states
-            self.fixed_states = 1
+            self.states = states  # provides a fixed list of states
+            self.fixed_states = True
         else:
-            self.fixed_states = 0
+            self.fixed_states = False
         
-        self.arm_types = arm_types
+        self.arm_types = arm_types  # defines possible arm_types for different offers and responses
     
-        self.context = context        
-        
-        self.offers = offers
+        self.offers = offers  # offers availible to the agent on a specific block and trial
         
         self.initialise()
     
@@ -77,7 +74,7 @@ class MultiArmedBandit(object):
                 probs =  self.priors['probs']
                 self.states['probs'][block, trial] = probs
             else:
-                self.states['probs'][block, trial] = self.states['probs'][block-1, -1]
+                self.states['probs'][block, trial] = self.states['probs'][block - 1, -1]
                 
             self.states['locations'][block, trial] = Categorical(probs=self.priors['locations']).sample((self.nsub,))
         else:
@@ -90,7 +87,7 @@ class MultiArmedBandit(object):
         if trial < self.trials:
             return zeros(self.nsub)
         else:
-            success = torch.any(self.states['points'][block, trial, :, 1:] > 2*self.trials//3, -1)
+            success = torch.any(self.states['points'][block, trial, :, 1:] > 2*self.trials // 3, -1)
             return success.long()
         
     def update_environment(self, block, trial, responses):
