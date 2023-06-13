@@ -9,8 +9,9 @@ Created on Thu Feb  8 11:50:01 2018
 import torch
 from torch.distributions import Categorical, Multinomial
 from torch import ones, zeros
+from .base import Task
 
-class SpaceAdventure(object):
+class SpaceAdventure(Task):
     def __init__(self, conditions,
                  outcome_likelihoods=None,
                  init_states = None,
@@ -19,12 +20,12 @@ class SpaceAdventure(object):
                  trials = 2):
         
         
-        self.ns = 6 #number of states
-        self.na = 2 #number of actions
-        self.no = 5 #number of observations
-        self.runs = runs # number of runs
-        self.nmb = mini_blocks #number of mini-blocks for each run
-        
+        super.__init__(runs, mini_blocks, trials)
+
+        self.ns = 6  # number of states
+        self.na = 2  # number of actions
+        self.no = 5  # number of observations
+
         self.list = torch.arange(0, runs, 1, dtype=torch.long)
         
         if outcome_likelihoods is None:
@@ -50,11 +51,11 @@ class SpaceAdventure(object):
             self.states[..., 0] = cat.sample()
         
     def make_transition_matrix(self):
-        p = self.tp  # transition probability
-        na = self.na # number of actions
-        ns = self.ns # number of states
-        runs = self.runs # number of runs
-        nmb = self.nmb # number of mini-blocks in each run
+        p = self.tp   # transition probability
+        na = self.na  # number of actions
+        ns = self.ns  # number of states
+        runs = self.nsub  # number of agents or parallel runs of the experiment
+        nmb = self.blocks  # number of mini-blocks in each run
         
         self.tm = zeros(runs, nmb, na, ns, ns)
         

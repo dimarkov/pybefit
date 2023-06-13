@@ -11,20 +11,19 @@ Created on Thu Feb  22 14:50:01 2018
 
 import torch
 from torch.distributions import Categorical
+from .base import Task
 
 __all__ = [
         'SocialInfluence',
         'TempRevLearn'
 ]
 
-class SocialInfluence(object):
+class SocialInfluence(Task):
     """Implementation of the social learning task
     """
 
-    def __init__(self, stimuli, nsub=1, blocks=1, trials=120):
-
-        self.trials = trials
-        self.nsub = nsub
+    def __init__(self, stimuli, nsub=1, trials=120):
+        super().__init__(nsub, 1, trials)
 
         # set stimuli
         self.stimuli = stimuli
@@ -52,14 +51,13 @@ class SocialInfluence(object):
         return [responses, outcomes]
 
 
-class TempRevLearn(object):
+class TempRevLearn(Task):
     """Implementation of the temporal reversal learning task.
     """
 
-    def __init__(self, stimuli=None, nsub=1, blocks=1, trials=1000):
-        self.trials = trials
-        self.nsub = nsub
-
+    def __init__(self, stimuli=None, nsub=1, trials=1000):
+        super().__init__(nsub, 1, trials)
+        
         # set stimuli
         self.stimuli = stimuli
 
