@@ -9,3 +9,4 @@ __pycache__
 .vscode
 dist
 src/pybefit.egg-info/
+build
