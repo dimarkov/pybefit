@@ -1,25 +1,59 @@
+import torch
 import pyro.distributions as dist
-from pyro import plate, sample
+from pyro import plate, sample, deterministic
 
-def befit_likelihood(agent, data=None, num_blocks=1, num_trials=1, num_agents=1):
+def befit_likelihood(agent, data=None, task=None, blocks=1, trials=1, num_agents=1):
     # num_agents -> batch dimension - number of different subjects/agents
-    # num_blocks -> number of experimental blocks
-    # num_trials -> number of trials within each block
+    # blocks -> number of experimental blocks
+    # trials -> number of trials within each block
+
+    data_absence = data is None
+    task_absence = task is None
+
+    if data_absence:
+        assert not task_absence
+
+    responses_all = []
+    outcomes_all = []
+    offers_all = []
 
     # define prior mean over model parametrs and subjects
     with plate('runs', num_agents):
-        for b in range(num_blocks):
-            for t in range(num_trials):
+        for b in range(blocks):
+            responses_all.append([])
+            outcomes_all.append([])
+            offers_all.append([])
+            for t in range(trials):
                 # update single trial
-                offers = data['offers'][b, t]
-                agent.planning(b, t, offers)
+                if data_absence: 
+                    offers = task.get_offer(b, t)
+                    if offers is not None:
+                        offers_all[-1].append(offers)
+                else:
+                    offers = data['offers'][b, t] if data['offers'] is not None else None
+                
+                logits = agent.planning(b, t, offers)
 
-                logits = agent.logits[-1]
+                responses = None if data_absence else data['responses'][b, t]
+                if data_absence:
+                    mask = True
+                else:
+                    mask = True if data['mask'] is None else data['mask'][b, t].byte()
+                
+                responses = sample('obs_{}_{}'.format(b, t), dist.Categorical(logits=logits).mask(mask), obs=responses)
+                responses_all[-1].append(responses)
 
-                outcomes = data['outcomes'][b, t]
-                responses = data['responses'][b, t]
-                mask = data['mask'][b, t]
+                outcomes = task.update_environment(b, t, responses) if data_absence else data['outcomes'][b, t]
+                outcomes_all[-1].append(outcomes)
 
                 agent.update_beliefs(b, t, [responses, outcomes], mask=mask)
+            
+            responses_all[-1] = torch.stack(responses_all[-1])
+            outcomes_all[-1] = torch.stack(outcomes_all[-1])
+            if len(offers_all[-1]) > 0:
+                offers_all[-1] = torch.stack(offers_all[-1])
 
-                sample('obs_{}_{}'.format(b, t), dist.Categorical(logits=logits).mask(mask.byte()), obs=responses)
+        deterministic('responses', torch.stack(responses_all))
+        deterministic('outcomes', torch.stack(outcomes_all))
+        if len(offers_all[-1]) > 0:
+            deterministic('offers', torch.stack(offers_all))
