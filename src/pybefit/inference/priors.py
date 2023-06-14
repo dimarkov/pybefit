@@ -1,4 +1,3 @@
-
 try:
     import numpyro as npyro
     import numpyro.distributions as ndist
@@ -96,7 +95,7 @@ class Normal(ModelBase):
 class NormalGamma(ModelBase):
     """NormalGamma over free model parameters.
     """
-    def __init__(self, num_params, num_agents, init_scale=10., backend=BACKEND):
+    def __init__(self, num_params, num_agents, init_scale=1., backend=BACKEND):
         super().__init__(num_params=num_params, num_agents=num_agents, backend=backend)
         self.init_scale = init_scale
 
@@ -106,7 +105,7 @@ class NormalGamma(ModelBase):
 
         # define hyper priors over model parameters
         a = 2 * self.tensor.ones(np)
-        b = self.tensor.ones(np)
+        b = 2 * self.tensor.ones(np)
         tau = self.sample('var_tau', self.dist.Gamma(a, b).to_event(1))
 
         # prior uncertainty is sampled from inverse gamma distribution for each parameter
