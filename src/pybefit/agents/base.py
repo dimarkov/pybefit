@@ -28,7 +28,14 @@ class Discrete(object):
     def num_params(self):
         """Return the number of model parameters
         """
-        raise NotImplementedError        
+        raise NotImplementedError
+
+    @property
+    def get_beliefs(self):
+        """Return a tuple of beliefs, that is, internal dynamical model states. Only used for 
+        numpyro/jax based models.
+        """        
+        raise NotImplementedError
         
     def set_parameters(self, *args, **kwargs):
         """Set free model parameters.
