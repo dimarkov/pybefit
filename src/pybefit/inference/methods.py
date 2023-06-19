@@ -98,16 +98,22 @@ def run_svi(model,
 
     return samples, svi, results
 
+default_dict_nuts = dict(
+    seed=0,
+    num_samples=1000,            
+    num_warmup=100,
+    sampler_kwargs={
+        'kernel': {}, 
+        'mcmc': {}
+    }
+)
 
-@dispatch(PyroModel, opts=dict)
+@dispatch(PyroModel, dict, opts=dict)
 def run_nuts(
     model,
+    data,
     *,
-    opts=dict(
-        num_samples=1000,            
-        num_warmup=100,
-        sampler_kwargs={'kernel': {}, 'mcmc': {}}
-    )
+    opts=default_dict_nuts
 ):
     """Perform SVI over free model parameters.
     """
@@ -122,7 +128,7 @@ def run_nuts(
         **opts['sampler_kwargs']['mcmc']
     )
 
-    mcmc.run()
+    mcmc.run(data=data)
     samples = mcmc.get_samples()
 
     return samples, mcmc
@@ -181,27 +187,20 @@ def run_svi(model,
     )
 
     rng_key, _rng_key = jr.split(rng_key)
-    pred = ninfer.Predictive(model, guide=guide, params=results.params, **opts['sample_kwargs'])
+    pred = ninfer.Predictive(guide, params=results.params, **opts['sample_kwargs'])
+    posterior_samples = pred(_rng_key, data=data)
+
+    pred = ninfer.Predictive(model, posterior_samples=posterior_samples)
     samples = pred(_rng_key, data=data)
 
-    return samples, svi, results
-
-default_dict_numpyro_nuts = dict(
-    seed=0,
-    num_samples=1000,            
-    num_warmup=100,
-    sampler_kwargs={
-        'kernel': {}, 
-        'mcmc': dict(progress_bar=True)
-    }
-)
+    return samples | posterior_samples, svi, results
 
 @dispatch(NumpyroModel, dict, opts=dict)
 def run_nuts(
     model,
     data,
     *,
-    opts=default_dict_numpyro_nuts
+    opts=default_dict_nuts
 ):
     """Estimate posterior over free model parameters using No-U-Turn sampler.
     """

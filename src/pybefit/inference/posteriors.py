@@ -37,9 +37,10 @@ class NormalPosterior(ModelBase):
     """A flat Normal prior over free model parameters.
     """
     
-    def __init__(self, num_params, num_agents, backend=BACKEND):
+    def __init__(self, num_params, num_agents, init_scale=.1, backend=BACKEND):
         super().__init__(num_params=num_params, num_agents=num_agents, backend=backend)
-
+        self.init_scale = init_scale
+        
     def __call__(self, *args, **kwargs):
         na = self.num_agents
         np = self.num_params
