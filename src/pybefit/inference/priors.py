@@ -95,7 +95,7 @@ class Normal(ModelBase):
 class NormalGamma(ModelBase):
     """NormalGamma over free model parameters.
     """
-    def __init__(self, num_params, num_agents, init_scale=1., backend=BACKEND):
+    def __init__(self, num_params, num_agents, init_scale=.5, backend=BACKEND):
         super().__init__(num_params=num_params, num_agents=num_agents, backend=backend)
         self.init_scale = init_scale
 
@@ -132,15 +132,19 @@ class RegularisedHorseshoe(ModelBase):
     """Regularised horseshoe prior over free model parameters. For details see: Piironen, Juho, and Aki Vehtari. "Sparsity information and regularization in the horseshoe and other shrinkage priors." (2017): 5018-5051.
     """
 
-    def __init__(self, num_params, num_agents, backend=BACKEND):
+    def __init__(self, num_params, num_agents, init_scale=1., backend=BACKEND):
         super().__init__(num_params=num_params, num_agents=num_agents, backend=backend)
+        self.init_scale = init_scale
 
     def __call__(self, *args, **kwargs):
         na = self.num_agents
         np = self.num_params
+        iscl = self.init_scale
 
         # each model parameter has a hyperparameter defining a group level mean
-        mu = self.sample('mu', self.dist.Normal(self.tensor.zeros(np), 10 * self.tensor.ones(np)).to_event(1))
+        mu = self.sample(
+            'mu', self.dist.Normal(self.tensor.zeros(np), iscl * self.tensor.ones(np)).to_event(1)
+        )
 
         # define prior uncertanty over model parameters
         c_sqr_inv = self.sample('c^{-2}', self.dist.Gamma(2 * self.tensor.ones(1), 2 * self.tensor.ones(1)).to_event(1))
