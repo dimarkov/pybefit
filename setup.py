@@ -18,17 +18,15 @@ package_data = \
 {'': ['*']}
 
 install_requires = \
-['jax',
- 'numpy',
- 'numpyro',
+['numpyro',
  'optax',
  'torch',
  'pyro-ppl',
- 'pandas',
  'pycm',
  'seaborn',
  'matplotlib',
  'arviz',
+ 'jupyterlab',
  'jupyterthemes',
  'jupyter-black']
 
@@ -44,7 +42,7 @@ classifiers = \
 
 setup_kwargs = {
     'name': 'pybefit',
-    'version': '0.1.22',
+    'version': '0.1.23',
     'description': 'Probabilistic inference for models of behaviour',
     'long_description': 'PyBefit is a Python library for Bayesian analysis of behavioral data. It is based on Pyro/Numpyro a probabilistic programing language, PyTorch, and Jax machine learning libraries.',
     'author': 'Dimitrije Marković',
