@@ -4,16 +4,7 @@ from jax import nn, random
 from pybefit.agents import Discrete
 from pybefit.tasks import Task
 
-class MABTask(Task):
-    
-    def __init__(self, outcomes):
-        blocks, trials, nsub, _ = outcomes.shape
-        super().__init__(nsub, blocks, trials)
-        self.outcomes = outcomes
 
-    def update_environment(self, block, trial, responses):
-        return self.outcomes[block, trial, range(self.nsub), responses]
-    
 class MABTask(Task):
     def __init__(self, outcomes, backend='torch'):
         blocks, trials, nsub, num_arms = outcomes.shape
