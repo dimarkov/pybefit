@@ -5,16 +5,16 @@ PyBefit is a Python library for Bayesian analysis of behavioral data. It is base
 
 Requirements
 ------------
-    numpy
-    pandas
-    matplotlib
-    seaborn
     pyro
     pytorch
     numpyro
     jax
-    jaxlib
-
+    [Optional]
+     - matplolib
+     - seaborn
+     - arviz
+     - jupyterlab
+    
 Installation
 ------------
 To install PyBefit with CPU-only versions of JAX and PyTorch you can run
@@ -25,7 +25,7 @@ pip install pybefit --upgrade
 ### Conda installation
 To install either JAX or Pytorch with Nvidia GPU support we recomment using [anaconda](https://conda.io/miniconda.html) package manager. First create pybefit environment and activate it
 ```sh
-conda create -n befit python=3.10
+conda create -n befit python=3.11
 conda activate befit
 ```
 Then follow instructions for installing [JAX](https://github.com/google/jax#installation) or [Pytorch](https://pytorch.org/) with GPU support.

@@ -77,7 +77,7 @@ class UCBAgent(Discrete):
         self.beta = self.tensor.exp(z[..., 2] + 2)  # response noise
 
         batch_shape = z.shape[:-1]
-        self.q = self.tensor.zeros(batch_shape + (self.na,))  # q values
+        self.q = self.tensor.ones(batch_shape + (self.na,)) / 2  # q values
         self.count = self.tensor.zeros(batch_shape + (self.na,))  # response count
 
     def update_beliefs(self, block, trial, response_outcome, **kwargs):
