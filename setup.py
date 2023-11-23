@@ -20,7 +20,6 @@ package_data = \
 install_requires = \
 ['numpyro',
  'optax',
- 'torch',
  'pyro-ppl',
  'pycm',
  'seaborn',
