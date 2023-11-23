@@ -144,7 +144,7 @@ class NormalGammaDiscreteDepth(Inferrer):
 
         c_tau = trns_tau(unc_tau)
 
-        ld_tau = trns_tau.inv.log_abs_det_jacobian(c_tau, unc_tau)
+        ld_tau = - trns_tau.inv.log_abs_det_jacobian(c_tau, unc_tau)
         ld_tau = sum_rightmost(ld_tau, ld_tau.dim() - c_tau.dim() + 1)
 
         sample("mu_decentered", dist.Delta(unc_mu, event_dim=1))

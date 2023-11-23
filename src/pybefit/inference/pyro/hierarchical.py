@@ -96,7 +96,7 @@ class Horseshoe(Inferrer):
 
         c_tau = trns(unc_tau)
 
-        ld_tau = trns.inv.log_abs_det_jacobian(c_tau, unc_tau)
+        ld_tau =  - trns.inv.log_abs_det_jacobian(c_tau, unc_tau)
         ld_tau = sum_rightmost(ld_tau, ld_tau.dim() - c_tau.dim() + 1)
 
         sample("mu", dist.Delta(unc_mu, event_dim=1))
