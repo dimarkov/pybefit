@@ -18,16 +18,11 @@ package_data = \
 {'': ['*']}
 
 install_requires = \
-['numpyro',
- 'optax',
- 'pyro-ppl',
- 'pycm',
- 'seaborn',
- 'matplotlib',
- 'arviz',
- 'jupyterlab',
- 'jupyterthemes',
- 'jupyter-black']
+[
+    'numpyro',
+    'optax',
+    'pyro-ppl'
+]
 
 classifiers = \
 [
