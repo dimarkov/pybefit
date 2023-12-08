@@ -29,7 +29,10 @@ adabelief = lambda *args, **kwargs: optax.adabelief(*args, eps=1e-8, eps_root=1e
 __all__ = [
     'run_svi',
     'run_nuts',
-    'format_posterior_samples'
+    'format_posterior_samples',
+    'default_dict_pyro_svi',
+    'default_dict_numpyro_svi',
+    'default_dict_nuts'
 ]
 
 default_dict_pyro_svi = dict(
