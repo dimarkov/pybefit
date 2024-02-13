@@ -40,12 +40,11 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
         q_pi, G = agent.infer_policies(beliefs) # what to do with G?
         key = prng_key()
         if data_absence:
-            keys = jr.split(key, agent.batch_size)
+            keys = jr.split(key, agent.batch_size + 1)
             n_ma =  agent.unique_multiactions.shape[0]
             action_probs_t = jnp.ones((agent.batch_size, n_ma)) / n_ma # place holder
-            actions_t = agent.sample_action(q_pi, rng_key=keys)
-            keys = jr.split(keys[-1], agent.batch_size)
-            outcome_t = task.step(actions_t, key=keys)
+            actions_t = agent.sample_action(q_pi, rng_key=keys[:-1])
+            outcome_t = task.step(keys[-1], actions_t)
         else:
             action_probs_t = agent.multiaction_probabilities(q_pi)
             actions_t = data['multiactions'][..., t, :]
@@ -76,8 +75,7 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
 
     if data_absence:
         key = prng_key()
-        keys = jr.split(key, agent.batch_size)
-        outcome_0 = jtu.tree_map(lambda x: jnp.expand_dims(x, -1), task.step(key=keys))
+        outcome_0 = jtu.tree_map(lambda x: jnp.expand_dims(x, -1), task.step(key))
     else:
         outcome_0 = jtu.tree_map(lambda x: x[..., :1], data['outcomes'])
 
