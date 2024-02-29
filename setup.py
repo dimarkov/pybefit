@@ -25,7 +25,7 @@ install_requires = \
 extras_require = \
 {
  'CM': ['pycm'],
- 'vis': ['seaborn', 'matplotlib'],
+ 'vis': ['seaborn', 'matplotlib', 'arviz'],
  'jupyter': ['jupyterlab', 'jupyterthemes', 'jupyter-black']
 }
 
@@ -56,4 +56,3 @@ setup_kwargs = {
 }
 
 setup(**setup_kwargs)
-
