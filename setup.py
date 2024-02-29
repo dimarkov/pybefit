@@ -20,14 +20,14 @@ package_data = \
 install_requires = \
 ['numpyro',
  'optax',
- 'pyro-ppl',
- 'pycm',
- 'seaborn',
- 'matplotlib',
- 'arviz',
- 'jupyterlab',
- 'jupyterthemes',
- 'jupyter-black']
+ 'pyro-ppl']
+
+extras_require = \
+{
+ 'CM': ['pycm'],
+ 'vis': ['seaborn', 'matplotlib'],
+ 'jupyter': ['jupyterlab', 'jupyterthemes', 'jupyter-black']
+}
 
 classifiers = \
 [
@@ -51,6 +51,7 @@ setup_kwargs = {
     'packages': packages,
     'package_data': package_data,
     'install_requires': install_requires,
+    'extras_require': extras_require,
     'python_requires': '>=3.10',
 }
 
