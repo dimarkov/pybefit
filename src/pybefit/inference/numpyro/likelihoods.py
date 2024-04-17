@@ -36,15 +36,16 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
     def step_fn(carry, t):
         actions = carry['multiactions']
         outcomes = carry['outcomes']
+        task = carry['task']
         beliefs = agent.infer_states(outcomes, actions, *carry['args'])
         q_pi, G = agent.infer_policies(beliefs) # what to do with G?
-        key = prng_key()
         if data_absence:
-            keys = jr.split(key, agent.batch_size + 1)
+            keys = jr.split(prng_key(), agent.batch_size + 1)
             n_ma =  agent.unique_multiactions.shape[0]
             action_probs_t = jnp.ones((agent.batch_size, n_ma)) / n_ma # place holder
             actions_t = agent.sample_action(q_pi, rng_key=keys[:-1])
-            outcome_t = task.step(keys[-1], actions_t)
+            keys =  jr.split(keys[-1], agent.batch_size)
+            outcome_t, task = task.step(keys, actions=actions_t)
         else:
             action_probs_t = agent.multiaction_probabilities(q_pi)
             actions_t = data['multiactions'][..., t, :]
@@ -69,13 +70,15 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
             'args': args, 
             'outcomes': outcomes, 
             'beliefs': beliefs, 
-            'multiactions': actions
+            'multiactions': actions,
+            'task': task
         }
         return new_carry, action_probs_t
 
     if data_absence:
         key = prng_key()
-        outcome_0 = jtu.tree_map(lambda x: jnp.expand_dims(x, -1), task.step(key))
+        keys = jr.split(key, agent.batch_size)
+        outcome_0 = jtu.tree_map(lambda x: jnp.expand_dims(x, -1), task.step(keys)[0])
     else:
         outcome_0 = jtu.tree_map(lambda x: x[..., :1], data['outcomes'])
 
@@ -83,11 +86,12 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
        'args': (agent.D, None,),
        'outcomes': outcome_0, 
        'beliefs': [],
-       'multiactions': None
+       'multiactions': None, 
+       'task': task
     }
     last, multiaction_probs = local_scan(step_fn, init, range(num_trials), axis=1)
 
-    return last, multiaction_probs, task
+    return last, multiaction_probs
 
 def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, num_agents=1, **kwargs):
     # Na -> batch dimension - number of different subjects/agents
@@ -98,14 +102,17 @@ def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, nu
 
     def step_fn(carry, block_data):
         agent, task = carry
-        output, multiaction_probs, task = pymdp_evolve_trials(agent, block_data, task, num_trials)
+        output, multiaction_probs = pymdp_evolve_trials(agent, block_data, task, num_trials)
         args = output.pop('args')
         multiactions = output.pop('multiactions')
+        task = output.pop('task')
         output['beliefs'] = agent.infer_states(output['outcomes'], multiactions, *args)
         
         deterministic('outcomes', output['outcomes'])
         deterministic('beliefs', output['beliefs'])
         deterministic('multiactions', multiactions)
+        if task is not None:
+            deterministic('states', jtu.tree_map(jnp.stack, task.states))
         
         with plate('num_trials', num_trials):
             with plate('num_agents', num_agents):
@@ -122,9 +129,9 @@ def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, nu
         
         agent = agent.learning(output['beliefs'], output['outcomes'], multiactions)
 
-        return (agent, task), None
+        return (agent, task.reset()), None
     
-    scan(step_fn, (agent, task), data, length=num_blocks)
+    scan(step_fn, (agent, task.reset()), data, length=num_blocks)
 
 
 def befit_evolve_trials(key, agent, init_beliefs, b, trials, data=None, task=None):
