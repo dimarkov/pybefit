@@ -47,7 +47,10 @@ class NormalPosterior(ModelBase):
         
         # posterior distribution over subject specific model parameters
         with self.plate('agents', na):
-            loc = self.param('loc', self.tensor.zeros((na, np)))
+            if self.backend == 'numpyro':
+                loc = self.param('loc', lambda key: self.dist.Normal(0., 1.).expand([na, np]).sample(key))
+            else:
+                loc = self.param('loc', self.tensor.zeros((na, np)))
             scale_tril = self.param('scale_tril', self.tensor.broadcast_to(self.init_scale * self.tensor.eye(np), (na, np, np)), constraint=self.constraints.softplus_lower_cholesky)
             z = self.sample('z', self.dist.MultivariateNormal(loc, scale_tril=scale_tril))
 

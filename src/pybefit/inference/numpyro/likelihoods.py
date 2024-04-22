@@ -111,6 +111,7 @@ def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, nu
         deterministic('outcomes', output['outcomes'])
         deterministic('beliefs', output['beliefs'])
         deterministic('multiactions', multiactions)
+        deterministic('multiaction_probs', multiaction_probs)
         if task is not None:
             deterministic('states', jtu.tree_map(jnp.stack, task.states))
         
@@ -128,9 +129,10 @@ def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, nu
                 sample('multiaction_cat', dist.Categorical(probs=multiaction_probs), obs=obs)
         
         agent = agent.learning(output['beliefs'], output['outcomes'], multiactions)
-
+        deterministic('agent', agent)
         return (agent, task.reset()), None
     
+    deterministic('first_agent', agent)
     scan(step_fn, (agent, task.reset()), data, length=num_blocks)
 
 
