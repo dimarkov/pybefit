@@ -31,26 +31,30 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
 
     data_absence = data is None
     if data_absence:
-        assert task is not None
+        assert task is not None # if there is no experimental data task env has to be passed
 
     def step_fn(carry, t):
         actions = carry['multiactions']
         outcomes = carry['outcomes']
         task = carry['task']
-        beliefs = agent.infer_states(outcomes, actions, *carry['args'])
+        beliefs = agent.infer_states(
+            outcomes,
+            carry['args'][0],
+            past_actions=actions,
+            qs_hist=carry['args'][1],
+            mask=None # TODO: add masked observations (e.g. for no response-outcome trials)
+        )
         q_pi, G = agent.infer_policies(beliefs) # what to do with G?
         if data_absence:
             keys = jr.split(prng_key(), agent.batch_size + 1)
-            n_ma =  agent.unique_multiactions.shape[0]
-            action_probs_t = jnp.ones((agent.batch_size, n_ma)) / n_ma # place holder
             actions_t = agent.sample_action(q_pi, rng_key=keys[:-1])
             keys =  jr.split(keys[-1], agent.batch_size)
             outcome_t, task = task.step(keys, actions=actions_t)
         else:
-            action_probs_t = agent.multiaction_probabilities(q_pi)
             actions_t = data['multiactions'][..., t, :]
             outcome_t = jtu.tree_map(lambda x: x[..., t + 1], data['outcomes'])
 
+        action_probs_t = agent.multiaction_probabilities(q_pi)
         outcomes = jtu.tree_map(
            lambda prev_o, new_o: jnp.concatenate(
                [prev_o, jnp.expand_dims(new_o, -1)], 
@@ -106,7 +110,13 @@ def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, nu
         args = output.pop('args')
         multiactions = output.pop('multiactions')
         task = output.pop('task')
-        output['beliefs'] = agent.infer_states(output['outcomes'], multiactions, *args)
+        output['beliefs'] = agent.infer_states(
+            output['outcomes'],
+            args[0],
+            past_actions=multiactions,
+            qs_hist=args[1],
+            mask=None,
+        )
         
         deterministic('outcomes', output['outcomes'])
         deterministic('beliefs', output['beliefs'])
@@ -127,13 +137,18 @@ def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, nu
                 else:
                     obs = multiaction_to_category(agent.unique_multiactions, multiactions)
                 sample('multiaction_cat', dist.Categorical(probs=multiaction_probs), obs=obs)
-        
-        agent = agent.learning(output['beliefs'], output['outcomes'], multiactions)
+
+        lr = jnp.ones(agent.batch_size)
+        lr_pA = kwargs.pop('lr', lr)
+        lr_pA = kwargs.pop('lr_pA', lr)
+        lr_pB = kwargs.pop('lr', lr)
+        lr_pB = kwargs.pop('lr_pB', lr)
+        agent = agent.infer_parameters(output['beliefs'], output['outcomes'], multiactions, lr_pA=lr_pA, lr_pB=lr_pB)
         deterministic('agent', agent)
-        return (agent, task.reset()), None
+        return (agent, task.reset(prng_key())), None
     
     deterministic('first_agent', agent)
-    scan(step_fn, (agent, task.reset()), data, length=num_blocks)
+    scan(step_fn, (agent, task.reset(prng_key())), data, length=num_blocks)
 
 
 def befit_evolve_trials(key, agent, init_beliefs, b, trials, data=None, task=None):
