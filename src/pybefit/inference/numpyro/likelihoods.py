@@ -1,52 +1,154 @@
 import numpyro.distributions as dist
 import jax.numpy as jnp
+import jax.tree_util as jtu
+import jax.random as jr
 
 from jax import lax, random
 from numpyro import plate, sample, deterministic
 from numpyro.contrib.control_flow import scan
+from numpyro import prng_key
 
-def pymdp_evolve_trials(agent, data):
+from jaxtyping import Array
 
-    def step_fn(carry, xs):
-        empirical_prior = carry
-        outcomes = xs['outcomes']
-        qs = agent.infer_states(outcomes, empirical_prior)
-        q_pi, _ = agent.infer_policies(qs)
+def multiaction_to_category(unique_multiactions: Array, multiaction: Array):
+    return jnp.argmax(jnp.all(unique_multiactions == jnp.expand_dims(multiaction, -2), -1), -1)
 
-        probs = agent.action_probabilities(q_pi)
+def local_scan(f, init, xs, length=None, axis=0):
+  if xs is None:
+    xs = [None] * length
+  carry = init
+  ys = []
+  for x in xs:
+    carry, y = f(carry, x)
+    if y is not None:
+       ys.append(y)
+  
+  ys = None if len(ys) < 1 else jtu.tree_map(lambda *x: jnp.stack(x,axis=axis), *ys)
 
-        actions = xs['actions']
-        empirical_prior = agent.update_empirical_prior(actions, qs)
-        
-        #TODO: if outcomes and actions are None, generate samples
-        return empirical_prior, (probs, outcomes, actions)
+  return carry, ys
 
-    prior = agent.D
-    _, res = lax.scan(step_fn, prior, data)
+def pymdp_evolve_trials(agent, data, task, num_trials):
 
-    return res
+    data_absence = data is None
+    if data_absence:
+        assert task is not None # if there is no experimental data task env has to be passed
 
-def pymdp_likelihood(agent, data=None, num_blocks=1, num_trials=1, num_agents=1):
+    def step_fn(carry, t):
+        actions = carry['multiactions']
+        outcomes = carry['outcomes']
+        task = carry['task']
+        beliefs = agent.infer_states(
+            outcomes,
+            carry['args'][0],
+            past_actions=actions,
+            qs_hist=carry['args'][1],
+            mask=None # TODO: add masked observations (e.g. for no response-outcome trials)
+        )
+        q_pi, G = agent.infer_policies(beliefs) # what to do with G?
+        if data_absence:
+            keys = jr.split(prng_key(), agent.batch_size + 1)
+            actions_t = agent.sample_action(q_pi, rng_key=keys[:-1])
+            keys =  jr.split(keys[-1], agent.batch_size)
+            outcome_t, task = task.step(keys, actions=actions_t)
+        else:
+            actions_t = data['multiactions'][..., t, :]
+            outcome_t = jtu.tree_map(lambda x: x[..., t + 1], data['outcomes'])
+
+        action_probs_t = agent.multiaction_probabilities(q_pi)
+        outcomes = jtu.tree_map(
+           lambda prev_o, new_o: jnp.concatenate(
+               [prev_o, jnp.expand_dims(new_o, -1)], 
+               -1), outcomes, outcome_t
+          )
+
+        if actions is not None:
+          actions = jnp.concatenate([actions, jnp.expand_dims(actions_t, -2)], -2)
+        else:
+          actions = jnp.expand_dims(actions_t, -2)
+
+        args = agent.update_empirical_prior(actions_t, beliefs)
+
+        # args = (pred_{t+1}, [post_1, post_{2}, ..., post_{t}])
+        # beliefs =  [post_1, post_{2}, ..., post_{t}]
+        new_carry = {
+            'args': args, 
+            'outcomes': outcomes, 
+            'beliefs': beliefs, 
+            'multiactions': actions,
+            'task': task
+        }
+        return new_carry, action_probs_t
+
+    if data_absence:
+        key = prng_key()
+        keys = jr.split(key, agent.batch_size)
+        outcome_0 = jtu.tree_map(lambda x: jnp.expand_dims(x, -1), task.step(keys)[0])
+    else:
+        outcome_0 = jtu.tree_map(lambda x: x[..., :1], data['outcomes'])
+
+    init = {
+       'args': (agent.D, None,),
+       'outcomes': outcome_0, 
+       'beliefs': [],
+       'multiactions': None, 
+       'task': task
+    }
+    last, multiaction_probs = local_scan(step_fn, init, range(num_trials), axis=1)
+
+    return last, multiaction_probs
+
+def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, num_agents=1, **kwargs):
     # Na -> batch dimension - number of different subjects/agents
     # Nb -> number of experimental blocks
     # Nt -> number of trials within each block
 
-    def step_fn(carry, xs):
-        agent = carry
-        probs, outcomes, actions = pymdp_evolve_trials(agent, xs)
+    assert num_agents == agent.batch_size
 
-        deterministic('outcomes', outcomes)
-
-        with plate('num_agents', num_agents):
-            with plate('num_trials', num_trials):
-                sample('actions', dist.Categorical(probs=probs).to_event(1), obs=actions)
+    def step_fn(carry, block_data):
+        agent, task = carry
+        output, multiaction_probs = pymdp_evolve_trials(agent, block_data, task, num_trials)
+        args = output.pop('args')
+        multiactions = output.pop('multiactions')
+        task = output.pop('task')
+        output['beliefs'] = agent.infer_states(
+            output['outcomes'],
+            args[0],
+            past_actions=multiactions,
+            qs_hist=args[1],
+            mask=None,
+        )
         
-        # TODO: update agent parameters - learning
+        deterministic('outcomes', output['outcomes'])
+        deterministic('beliefs', output['beliefs'])
+        deterministic('multiactions', multiactions)
+        deterministic('multiaction_probs', multiaction_probs)
+        if task is not None:
+            deterministic('states', jtu.tree_map(jnp.stack, task.states))
+        
+        with plate('num_trials', num_trials):
+            with plate('num_agents', num_agents):
+                # if block_data contains multiaction_cat field (multiaction as categories) then use that directly 
+                # otherwise map multiactions to categories
+                if block_data is not None:
+                    if 'multiaction_cat' not in block_data:
+                        obs = multiaction_to_category(agent.unique_multiactions, multiactions)
+                    else:
+                        obs = block_data['multiaction_cat']
+                else:
+                    obs = multiaction_to_category(agent.unique_multiactions, multiactions)
+                sample('multiaction_cat', dist.Categorical(probs=multiaction_probs), obs=obs)
 
-        return agent, None
+        lr = jnp.ones(agent.batch_size)
+        lr_pA = kwargs.pop('lr', lr)
+        lr_pA = kwargs.pop('lr_pA', lr)
+        lr_pB = kwargs.pop('lr', lr)
+        lr_pB = kwargs.pop('lr_pB', lr)
+        agent = agent.infer_parameters(output['beliefs'], output['outcomes'], multiactions, lr_pA=lr_pA, lr_pB=lr_pB)
+        deterministic('agent', agent)
+        return (agent, task.reset(prng_key())), None
     
-    init_agent = agent
-    scan(step_fn, init_agent, data, length=num_blocks)
+    deterministic('first_agent', agent)
+    scan(step_fn, (agent, task.reset(prng_key())), data, length=num_blocks)
 
 
 def befit_evolve_trials(key, agent, init_beliefs, b, trials, data=None, task=None):
@@ -77,7 +179,7 @@ def befit_evolve_trials(key, agent, init_beliefs, b, trials, data=None, task=Non
     return last_beliefs, *res
 
 
-def befit_likelihood(agent, data=None, task=None, blocks=1, trials=1, num_agents=1, seed=0, **kwargs):
+def befit_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, num_agents=1, seed=0, **kwargs):
     # num_agents -> batch dimension - number of different subjects/agents
     # blocks -> number of experimental blocks
     # trials -> number of trials within each block
@@ -86,13 +188,13 @@ def befit_likelihood(agent, data=None, task=None, blocks=1, trials=1, num_agents
     if data_absence:
         assert task is not None
 
-    keys = random.split(random.PRNGKey(seed), blocks)
+    keys = random.split(random.PRNGKey(seed), num_blocks)
     # define prior mean over model parametrs and subjects
     def step_fn(carry, xs):
         init_beliefs = carry
-        b, key, block_data = xs
+        block_index, key, block_data = xs
         if not data_absence:
-            mask = True if block_data['mask'] is None else data['mask']
+            mask = True if block_data['mask'] is None else block_data['mask']
         else:
             mask = True
         
@@ -100,14 +202,14 @@ def befit_likelihood(agent, data=None, task=None, blocks=1, trials=1, num_agents
             key,
             agent, 
             init_beliefs, 
-            b, 
-            trials, 
+            block_index, 
+            num_trials, 
             data=block_data, 
             task=task
         )
 
         with plate('runs', num_agents):
-            with plate('num_trials', trials):
+            with plate('num_trials', num_trials):
                 sample('responses', dist.Categorical(logits=logits).mask(mask), obs=responses)
 
         deterministic('outcomes', outcomes)
@@ -118,4 +220,4 @@ def befit_likelihood(agent, data=None, task=None, blocks=1, trials=1, num_agents
 
         return last_beliefs, None
 
-    scan(step_fn, agent.get_beliefs, (jnp.arange(blocks), keys, data), length=blocks)
+    scan(step_fn, agent.get_beliefs, (jnp.arange(num_blocks), keys, data), length=num_blocks)
