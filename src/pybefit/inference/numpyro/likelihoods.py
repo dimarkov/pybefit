@@ -97,7 +97,7 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
 
     return last, multiaction_probs
 
-def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, num_agents=1, **kwargs):
+def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, num_agents=1, log_agent=False, **kwargs):
     # Na -> batch dimension - number of different subjects/agents
     # Nb -> number of experimental blocks
     # Nt -> number of trials within each block
@@ -144,11 +144,18 @@ def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, nu
         lr_pB = kwargs.pop('lr', lr)
         lr_pB = kwargs.pop('lr_pB', lr)
         agent = agent.infer_parameters(output['beliefs'], output['outcomes'], multiactions, lr_pA=lr_pA, lr_pB=lr_pB)
-        deterministic('agent', agent)
-        return (agent, task.reset(prng_key())), None
+
+        if log_agent:
+            deterministic('agent', agent)
+        
+        init_task = task.reset(prng_key()) if task is not None else task
+        return (agent, init_task), None
     
-    deterministic('first_agent', agent)
-    scan(step_fn, (agent, task.reset(prng_key())), data, length=num_blocks)
+    if log_agent:
+        deterministic('first_agent', agent)
+    
+    init_task = task.reset(prng_key()) if task is not None else task
+    scan(step_fn, (agent, init_task), data, length=num_blocks)
 
 
 def befit_evolve_trials(key, agent, init_beliefs, b, trials, data=None, task=None):
