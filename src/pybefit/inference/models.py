@@ -46,8 +46,9 @@ class NumpyroModel(object):
 
     def __call__(self, data=None):
         z = self.prior(**self.opts['prior'])
-        agent = self.transform(z, **self.opts['transform'])
-        self.likelihood(agent, data=data, **self.opts['likelihood'])
+        out = self.transform(z, **self.opts['transform'])
+        out = out if isinstance(out, tuple) else (out,)
+        self.likelihood(*out, data=data, **self.opts['likelihood'])
 
 
 class NumpyroGuide:

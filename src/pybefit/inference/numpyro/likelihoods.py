@@ -97,7 +97,7 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
 
     return last, multiaction_probs
 
-def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, num_agents=1, log_agent=False, **kwargs):
+def pymdp_likelihood(agent, external_likelihood=None, data=None, task=None, num_blocks=1, num_trials=1, num_agents=1, log_agent=False, **kwargs):
     # Na -> batch dimension - number of different subjects/agents
     # Nb -> number of experimental blocks
     # Nt -> number of trials within each block
@@ -137,6 +137,9 @@ def pymdp_likelihood(agent, data=None, task=None, num_blocks=1, num_trials=1, nu
                 else:
                     obs = multiaction_to_category(agent.unique_multiactions, multiactions)
                 sample('multiaction_cat', dist.Categorical(probs=multiaction_probs), obs=obs)
+
+                if external_likelihood is not None:
+                    external_likelihood(agent, block_data, output, multiaction_probs)
 
         lr = jnp.ones(agent.batch_size)
         lr_pA = kwargs.pop('lr', lr)
