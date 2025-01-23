@@ -92,6 +92,28 @@ class Normal(ModelBase):
         return z
 
 
+class MultivariateNormal(ModelBase):
+    """A Multivariate Normal prior over free model parameters.
+    """
+    
+    def __init__(self, num_params, num_agents, hyperparams=None, backend=BACKEND):
+        super().__init__(num_params=num_params, num_agents=num_agents, backend=backend)
+        if hyperparams is not None:
+            self.hyperparams = hyperparams
+        else:
+            self.hyperparams = {
+                'loc': self.tensor.zeros((self.num_agents, self.num_params)),
+                'scale_tril': self.tensor.eye(self.num_params)
+            }
+
+    def __call__(self, *args, **kwargs):
+        na = self.num_agents
+        # parameters for individual agents are sampled from the same prior
+        with self.plate('agents', na):
+            z = self.sample('z', self.dist.MultivariateNormal(**self.hyperparams))
+
+        return z
+
 class NormalGamma(ModelBase):
     """NormalGamma over free model parameters.
     """
