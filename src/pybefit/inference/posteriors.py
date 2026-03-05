@@ -34,7 +34,7 @@ from .priors import ModelBase
 
 
 class NormalPosterior(ModelBase):
-    """A flat Normal prior over free model parameters.
+    """A flat Multivariate Normal posterior.
     """
     
     def __init__(self, num_params, num_agents, init_scale=.1, backend=BACKEND):
@@ -45,14 +45,25 @@ class NormalPosterior(ModelBase):
         na = self.num_agents
         np = self.num_params
         
+        if self.backend == 'numpyro':
+            loc = self.param(
+                'loc', lambda key: self.dist.Normal(0., .1).expand([na, np]).sample(key)
+            )
+        else:
+            # todo: randomize initial loc values in pytorch
+            loc = self.param('loc', self.tensor.zeros((na, np)))
+        
+        scale_tril = self.param(
+            'scale_tril',
+            self.tensor.broadcast_to(self.init_scale * self.tensor.eye(np), (na, np, np)),
+            constraint=self.constraints.softplus_lower_cholesky
+        )
+            
         # posterior distribution over subject specific model parameters
         with self.plate('agents', na):
-            if self.backend == 'numpyro':
-                loc = self.param('loc', lambda key: self.dist.Normal(0., 1.).expand([na, np]).sample(key))
-            else:
-                loc = self.param('loc', self.tensor.zeros((na, np)))
-            scale_tril = self.param('scale_tril', self.tensor.broadcast_to(self.init_scale * self.tensor.eye(np), (na, np, np)), constraint=self.constraints.softplus_lower_cholesky)
-            z = self.sample('z', self.dist.MultivariateNormal(loc, scale_tril=scale_tril))
+            z = self.sample(
+                'z', self.dist.MultivariateNormal(loc, scale_tril=scale_tril)
+            )
 
         return z
 

@@ -63,24 +63,25 @@ class UCBAgent(Discrete):
         return (self.q, self.count)
     
     def set_parameters(self, z):
-        self.lr = self.sigmoid(4 * z[..., 0] + 2)  # learning rate
-        self.c = self.tensor.exp(z[..., 1] - .5)  # exploration strength
-        self.beta = self.tensor.exp(z[..., 2] + 2)  # response noise
-
         batch_shape = z.shape[:-1]
-        self.q = self.tensor.ones(batch_shape + (self.na,)) / 2  # q values
+        self.lr = self.sigmoid(z[..., 0])  # learning rate
+        self.c = self.nn.relu(z[..., 1] + 2)  # exploration strength
+        self.beta = self.nn.relu(z[..., 2] + 2)  # response noise
+
+        
+        self.q = self.tensor.zeros(batch_shape + (self.na,))  # q values
         self.count = self.tensor.zeros(batch_shape + (self.na,))  # response count
 
     def update_beliefs(self, block, trial, response_outcome, **kwargs):
         
         # encode reponses as zero/one array where one is assigned to the chosen arm and zero to all other arms
         beliefs = kwargs.pop('beliefs', (self.q, self.count))
-        q = beliefs[0]
-        count = beliefs[1]
+        q = jnp.where(trial > 0, beliefs[0], 0.)
+        count = jnp.where(trial > 0, beliefs[1], 0.)
         response = self.nn.one_hot(response_outcome[0], self.na)
 
         # add one dimension to the right to outcomes to match dimensionality of responses
-        outcome = response_outcome[1][..., None] 
+        outcome = 2 * response_outcome[1][..., None] - 1
 
 
         alpha = self.lr[..., None] / (count + 1)
@@ -97,10 +98,11 @@ class UCBAgent(Discrete):
         q = beliefs[0]
         count = beliefs[1]
 
-        t = block * self.nt + trial
-        logits = q + self.c[..., None] * self.tensor.sqrt( self.tensor.log(t + self.tensor.ones(1))/(count + 1e-4))
+        t = trial
+        logits = self.beta[..., None] * q 
+        logits += self.c[..., None] * self.tensor.sqrt( self.tensor.log(t + self.tensor.ones(1))/(count + 1e-8))
 
-        return self.beta[..., None] * logits 
+        return  logits 
         
     def sample_responses(self, block, trial, logits, **kwargs):
 
