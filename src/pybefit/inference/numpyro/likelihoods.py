@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import jax.tree_util as jtu
 import jax.random as jr
 
-from jax import lax, random
+from jax import lax, random, vmap
 from numpyro import plate, sample, deterministic
 from numpyro.contrib.control_flow import scan
 from numpyro import prng_key
@@ -27,21 +27,22 @@ def local_scan(f, init, xs, length=None, axis=0):
 
   return carry, ys
 
-def pymdp_evolve_trials(agent, data, task, num_trials):
+def pymdp_evolve_trials(agent, data, task, init_states, num_trials):
 
     data_absence = data is None
     if data_absence:
         assert task is not None # if there is no experimental data task env has to be passed
+        assert init_states is not None
 
     def step_fn(carry, t):
         actions = carry['multiactions']
         outcomes = carry['outcomes']
-        task = carry['task']
+        state_t = carry['states']
         beliefs = agent.infer_states(
             outcomes,
-            carry['args'][0],
+            carry['pred'],
             past_actions=actions,
-            qs_hist=carry['args'][1],
+            qs_hist=carry['beliefs'],
             mask=None # TODO: add masked observations (e.g. for no response-outcome trials)
         )
         q_pi, G = agent.infer_policies(beliefs) # what to do with G?
@@ -49,15 +50,16 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
             keys = jr.split(prng_key(), agent.batch_size + 1)
             actions_t = agent.sample_action(q_pi, rng_key=keys[:-1])
             keys =  jr.split(keys[-1], agent.batch_size)
-            outcome_t, task = task.step(keys, actions=actions_t)
+            outcome_t, state_t = vmap(task.step)(keys, state=state_t, action=actions_t)
         else:
             actions_t = data['multiactions'][..., t, :]
-            outcome_t = jtu.tree_map(lambda x: x[..., t + 1], data['outcomes'])
+            outcome_t = jtu.tree_map(lambda x: jnp.expand_dims(x[..., t + 1], -1), data['outcomes'])
 
         action_probs_t = agent.multiaction_probabilities(q_pi)
+
         outcomes = jtu.tree_map(
            lambda prev_o, new_o: jnp.concatenate(
-               [prev_o, jnp.expand_dims(new_o, -1)], 
+               [prev_o, new_o], 
                -1), outcomes, outcome_t
           )
 
@@ -66,32 +68,31 @@ def pymdp_evolve_trials(agent, data, task, num_trials):
         else:
           actions = jnp.expand_dims(actions_t, -2)
 
-        args = agent.update_empirical_prior(actions_t, beliefs)
+        pred = agent.update_empirical_prior(actions_t, beliefs)
 
-        # args = (pred_{t+1}, [post_1, post_{2}, ..., post_{t}])
-        # beliefs =  [post_1, post_{2}, ..., post_{t}]
         new_carry = {
-            'args': args, 
+            'pred': pred, 
             'outcomes': outcomes, 
             'beliefs': beliefs, 
             'multiactions': actions,
-            'task': task
+            'states': state_t
         }
         return new_carry, action_probs_t
 
     if data_absence:
         key = prng_key()
         keys = jr.split(key, agent.batch_size)
-        outcome_0 = jtu.tree_map(lambda x: jnp.expand_dims(x, -1), task.step(keys)[0])
+        outcome_0, state_0 = vmap(task.step)(keys, init_states, action=None)
     else:
         outcome_0 = jtu.tree_map(lambda x: x[..., :1], data['outcomes'])
+        state_0 = None
 
     init = {
-       'args': (agent.D, None,),
+       'pred': agent.D,
        'outcomes': outcome_0, 
-       'beliefs': [],
+       'beliefs': None,
        'multiactions': None, 
-       'task': task
+       'states': state_0,
     }
     last, multiaction_probs = local_scan(step_fn, init, range(num_trials), axis=1)
 
@@ -105,16 +106,16 @@ def pymdp_likelihood(agent, external_likelihood=None, data=None, task=None, num_
     assert num_agents == agent.batch_size
 
     def step_fn(carry, block_data):
-        agent, task = carry
-        output, multiaction_probs = pymdp_evolve_trials(agent, block_data, task, num_trials)
-        args = output.pop('args')
+        agent, states = carry
+        output, multiaction_probs = pymdp_evolve_trials(agent, block_data, task, states, num_trials)
+        pred = output.pop('pred')
+        beliefs = output.pop('beliefs')
         multiactions = output.pop('multiactions')
-        task = output.pop('task')
         output['beliefs'] = agent.infer_states(
             output['outcomes'],
-            args[0],
+            pred,
             past_actions=multiactions,
-            qs_hist=args[1],
+            qs_hist=beliefs,
             mask=None,
         )
         
@@ -123,7 +124,9 @@ def pymdp_likelihood(agent, external_likelihood=None, data=None, task=None, num_
         deterministic('multiactions', multiactions)
         deterministic('multiaction_probs', multiaction_probs)
         if task is not None:
-            deterministic('states', jtu.tree_map(jnp.stack, task.states))
+            states = output.pop('states')
+            if states is not None:
+                deterministic('states', jtu.tree_map(jnp.stack, states))
         
         with plate('num_trials', num_trials):
             with plate('num_agents', num_agents):
@@ -151,14 +154,22 @@ def pymdp_likelihood(agent, external_likelihood=None, data=None, task=None, num_
         if record_agent:
             deterministic('agent_sequence', agent)
         
-        init_task = task.reset(prng_key()) if task is not None else task
-        return (agent, init_task), None
+        key = prng_key()
+        if task is not None:
+            _, init_states = vmap(task.reset)(jr.split(key, agent.batch_size))
+        else:
+            init_states = None
+        return (agent, init_states), None
     
     if record_agent:
         deterministic('init_agent', agent)
     
-    init_task = task.reset(prng_key()) if task is not None else task
-    scan(step_fn, (agent, init_task), data, length=num_blocks)
+    key = prng_key()
+    if task is not None:
+        _, init_states = vmap(task.reset)(jr.split(key, agent.batch_size))
+    else:
+        init_states = None
+    scan(step_fn, (agent, init_states), data, length=num_blocks)
 
 
 def befit_evolve_trials(key, agent, init_beliefs, b, trials, data=None, task=None):
